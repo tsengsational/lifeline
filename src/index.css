@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --phone-beige: #d8cfc4;
+    --phone-shadow: #b3a79a;
+    --phone-highlight: #f5f0e6;
+    --button-red: #cc3333;
+    --button-green: #338833;
+  }
+
+  body {
+    /* 90s-style patterned wallpaper background */
+    background-color: #556b2f;
+    background-image: radial-gradient(#6b8e23 1px, transparent 1px);
+    background-size: 20px 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    overflow: hidden;
+  }
+}
+
+@layer components {
+  /* Beveled effect for the plastic body */
+  .plastic-body {
+    background-color: var(--phone-beige);
+    box-shadow: 
+      inset 4px 4px 0px var(--phone-highlight),
+      inset -4px -4px 0px var(--phone-shadow),
+      10px 10px 20px rgba(0,0,0,0.4);
+    border-radius: 40px;
+    position: relative;
+  }
+
+  /* Physical button feel */
+  .tactile-button {
+    transition: all 0.1s;
+    box-shadow: 
+      inset -3px -3px 0px rgba(0,0,0,0.3),
+      inset 3px 3px 0px rgba(255,255,255,0.5),
+      2px 4px 0px rgba(0,0,0,0.2);
+  }
+
+  .tactile-button:active {
+    transform: translateY(2px);
+    box-shadow: 
+      inset 2px 2px 0px rgba(0,0,0,0.3),
+      0px 1px 0px rgba(0,0,0,0.2);
+  }
+
+  /* Lo-fi grain overlay */
+  .grain {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: url('https://grainy-gradients.vercel.app/noise.svg');
+    opacity: 0.05;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  /* Speaker Grill circles */
+  .speaker-hole {
+    width: 6px;
+    height: 6px;
+    background: #333;
+    border-radius: 50%;
+    box-shadow: inset 1px 1px 1px rgba(0,0,0,0.8);
+  }
+}

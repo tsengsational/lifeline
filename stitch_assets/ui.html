@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>90s Digital Answering Machine</title>
+<!-- Tailwind CSS CDN with plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style data-purpose="retro-fonts">
+    @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+    
+    /* Segment Display Font */
+    .digital-font {
+      font-family: 'VT323', monospace;
+    }
+  </style>
+<style data-purpose="custom-retro-effects">
+    :root {
+      --phone-beige: #d8cfc4;
+      --phone-shadow: #b3a79a;
+      --phone-highlight: #f5f0e6;
+      --button-red: #cc3333;
+      --button-green: #338833;
+    }
+
+    body {
+      /* 90s-style patterned wallpaper background */
+      background-color: #556b2f;
+      background-image: radial-gradient(#6b8e23 1px, transparent 1px);
+      background-size: 20px 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    /* Beveled effect for the plastic body */
+    .plastic-body {
+      background-color: var(--phone-beige);
+      box-shadow: 
+        inset 4px 4px 0px var(--phone-highlight),
+        inset -4px -4px 0px var(--phone-shadow),
+        10px 10px 20px rgba(0,0,0,0.4);
+      border-radius: 40px;
+      position: relative;
+    }
+
+    /* Physical button feel */
+    .tactile-button {
+      transition: all 0.1s;
+      box-shadow: 
+        inset -3px -3px 0px rgba(0,0,0,0.3),
+        inset 3px 3px 0px rgba(255,255,255,0.5),
+        2px 4px 0px rgba(0,0,0,0.2);
+    }
+
+    .tactile-button:active {
+      transform: translateY(2px);
+      box-shadow: 
+        inset 2px 2px 0px rgba(0,0,0,0.3),
+        0px 1px 0px rgba(0,0,0,0.2);
+    }
+
+    /* Lo-fi grain overlay */
+    .grain {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: url('https://grainy-gradients.vercel.app/noise.svg');
+      opacity: 0.05;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    /* Speaker Grill circles */
+    .speaker-hole {
+      width: 6px;
+      height: 6px;
+      background: #333;
+      border-radius: 50%;
+      box-shadow: inset 1px 1px 1px rgba(0,0,0,0.8);
+    }
+  </style>
+</head>
+<body class="antialiased">
+<div class="grain"></div>
+<!-- BEGIN: PhoneContainer -->
+<main class="plastic-body w-[90%] max-w-[400px] p-8 flex flex-col items-center gap-6 border-2 border-[#b3a79a]" data-purpose="answering-machine-shell">
+<!-- BEGIN: TopSection - Display and Speaker -->
+<section class="w-full flex justify-between items-start mb-4" data-purpose="device-header">
+<!-- Digital Display Block -->
+<div class="bg-black p-3 rounded-lg border-4 border-[#8e857b] shadow-inner" data-purpose="status-display">
+<div class="digital-font text-red-600 text-5xl leading-none tracking-widest" id="clock-display">
+          12:45
+        </div>
+<div class="text-[10px] text-red-900 font-bold uppercase mt-1">Messages: 03</div>
+</div>
+<!-- Speaker Grill -->
+<div class="grid grid-cols-4 gap-2 p-2 bg-[#c0b5a8] rounded-full border border-[#a1978b]" data-purpose="voicemail-speaker">
+<div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+<div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+<div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+<div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+</div>
+</section>
+<!-- END: TopSection -->
+<!-- BEGIN: BrandLogo -->
+<div class="w-full text-left px-2">
+<span class="font-serif italic font-black text-[#8e857b] text-xl opacity-60">MEMO-TONE 3000</span>
+</div>
+<!-- END: BrandLogo -->
+<!-- BEGIN: ButtonGrid -->
+<section class="grid grid-cols-2 gap-6 w-full mt-4" data-purpose="control-panel">
+<!-- Record Button -->
+<button class="tactile-button bg-[#444] text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black" data-purpose="record-action">
+<div class="w-4 h-4 bg-red-600 rounded-full animate-pulse shadow-[0_0_5px_red]"></div>
+<span class="text-xs font-bold uppercase tracking-tighter">Record</span>
+</button>
+<!-- Play Random Button -->
+<button class="tactile-button bg-[#6b7280] text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black" data-purpose="play-random-action">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="text-xs font-bold uppercase tracking-tighter">Play Random</span>
+</button>
+<!-- Share Button -->
+<button class="tactile-button bg-[#6b7280] text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black" data-purpose="share-action">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="text-xs font-bold uppercase tracking-tighter">Share Memo</span>
+</button>
+<!-- Placeholder for symmetry/other controls -->
+<div class="flex items-center justify-center">
+<div class="w-12 h-2 bg-[#8e857b] rounded-full opacity-30"></div>
+</div>
+</section>
+<!-- END: ButtonGrid -->
+<!-- BEGIN: FeaturedAction -->
+<section class="w-full mt-8" data-purpose="primary-call-to-action">
+<button class="tactile-button w-full bg-[#ffcc00] hover:bg-[#ffdb4d] text-[#1a1a1a] py-6 rounded-2xl flex flex-col items-center justify-center border-b-8 border-[#b38f00] group" data-purpose="buy-tickets-button">
+<span class="text-2xl font-black uppercase italic tracking-widest group-active:scale-95 transition-transform">Buy Tickets</span>
+<span class="text-[10px] font-bold mt-1 text-[#665200]">FOR THE LIVE PLAY PERFORMANCE</span>
+</button>
+</section>
+<!-- END: FeaturedAction -->
+<!-- BEGIN: DecorativeDetail -->
+<div class="mt-4 w-full h-1 bg-[#b3a79a] rounded shadow-inner" data-purpose="decorative-groove"></div>
+<div class="mt-1 w-full flex justify-center">
+<div class="w-1/3 h-8 bg-[#c0b5a8] rounded-b-3xl border-x-2 border-b-2 border-[#b3a79a]"></div>
+</div>
+<!-- END: DecorativeDetail -->
+</main>
+<!-- END: PhoneContainer -->
+<script data-purpose="clock-logic">
+    // Simple logic to keep the 90s digital clock updated
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const display = document.getElementById('clock-display');
+      if (display) {
+        // Blinking colon effect
+        const colon = new Date().getSeconds() % 2 === 0 ? ':' : ' ';
+        display.innerText = `${hours}${colon}${minutes}`;
+      }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
+</body></html>
