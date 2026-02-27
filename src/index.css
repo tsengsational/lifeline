@@ -1,6 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .font-handwriting {
+    font-family: 'Caveat', cursive;
+  }
+}
 
 @layer base {
   :root {
@@ -26,13 +33,14 @@
 }
 
 @layer components {
+
   /* Beveled effect for the plastic body */
   .plastic-body {
     background-color: var(--phone-beige);
-    box-shadow: 
+    box-shadow:
       inset 4px 4px 0px var(--phone-highlight),
       inset -4px -4px 0px var(--phone-shadow),
-      10px 10px 20px rgba(0,0,0,0.4);
+      10px 10px 20px rgba(0, 0, 0, 0.4);
     border-radius: 40px;
     position: relative;
   }
@@ -40,23 +48,26 @@
   /* Physical button feel */
   .tactile-button {
     transition: all 0.1s;
-    box-shadow: 
-      inset -3px -3px 0px rgba(0,0,0,0.3),
-      inset 3px 3px 0px rgba(255,255,255,0.5),
-      2px 4px 0px rgba(0,0,0,0.2);
+    box-shadow:
+      inset -3px -3px 0px rgba(0, 0, 0, 0.3),
+      inset 3px 3px 0px rgba(255, 255, 255, 0.5),
+      2px 4px 0px rgba(0, 0, 0, 0.2);
   }
 
   .tactile-button:active {
     transform: translateY(2px);
-    box-shadow: 
-      inset 2px 2px 0px rgba(0,0,0,0.3),
-      0px 1px 0px rgba(0,0,0,0.2);
+    box-shadow:
+      inset 2px 2px 0px rgba(0, 0, 0, 0.3),
+      0px 1px 0px rgba(0, 0, 0, 0.2);
   }
 
   /* Lo-fi grain overlay */
   .grain {
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: url('https://grainy-gradients.vercel.app/noise.svg');
     opacity: 0.05;
     pointer-events: none;
@@ -69,6 +80,6 @@
     height: 6px;
     background: #333;
     border-radius: 50%;
-    box-shadow: inset 1px 1px 1px rgba(0,0,0,0.8);
+    box-shadow: inset 1px 1px 1px rgba(0, 0, 0, 0.8);
   }
 }
