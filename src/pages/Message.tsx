@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Play, AlertCircle, ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { playBeep } from '../lib/audioProcessing';
 
 export function Message() {
     const { id } = useParams<{ id: string }>();
@@ -37,6 +38,31 @@ export function Message() {
         fetchMessage();
     }, [id]);
 
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [audioPlayer, setAudioPlayer] = useState<HTMLAudioElement | null>(null);
+
+    const handlePlay = () => {
+        if (!audioUrl) return;
+
+        if (isPlaying && audioPlayer) {
+            audioPlayer.pause();
+            setIsPlaying(false);
+        } else {
+            const player = audioPlayer || new Audio(audioUrl);
+            player.crossOrigin = "anonymous"; // Helps with cross-domain issues
+            player.onended = () => {
+                setIsPlaying(false);
+                playBeep(); // Play beep when playback reaches the end
+            };
+            player.onerror = () => setIsPlaying(false);
+
+            if (!audioPlayer) setAudioPlayer(player);
+
+            player.play().catch(console.error);
+            setIsPlaying(true);
+        }
+    };
+
     return (
         <>
             <div className="grain shared-message__grain"></div>
@@ -45,7 +71,7 @@ export function Message() {
                 <section className="w-full flex justify-between items-start mb-4 shared-message__header" data-purpose="device-header">
                     <div className="bg-black p-3 rounded-lg border-4 border-[#8e857b] shadow-inner shared-message__display" data-purpose="status-display">
                         <div className="digital-font text-red-600 text-3xl leading-none tracking-widest uppercase shared-message__status">
-                            {loading ? 'WAIT' : audioUrl ? 'PLAY' : 'ERR'}
+                            {loading ? 'WAIT' : audioUrl ? (isPlaying ? 'PLAY' : 'STOP') : 'ERR'}
                         </div>
                         <div className="text-[10px] text-red-900 font-bold uppercase mt-1 shared-message__status-label">Status</div>
                     </div>
@@ -73,14 +99,20 @@ export function Message() {
                         </div>
                     ) : audioUrl ? (
                         <button
-                            onClick={() => {
-                                const audio = new Audio(audioUrl);
-                                audio.play();
-                            }}
+                            onClick={handlePlay}
                             className="tactile-button w-full bg-[#338833] text-white py-6 rounded-xl flex flex-col items-center justify-center gap-2 border-b-4 border-black shared-message__play-button"
                         >
-                            <Play className="w-8 h-8 shared-message__play-icon" />
-                            <span className="text-sm font-bold uppercase tracking-tighter shared-message__play-label">Play Message</span>
+                            {isPlaying ? (
+                                <>
+                                    <AlertCircle className="w-8 h-8 animate-pulse shared-message__play-icon" />
+                                    <span className="text-sm font-bold uppercase tracking-tighter shared-message__play-label">Pause Message</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="w-8 h-8 shared-message__play-icon" />
+                                    <span className="text-sm font-bold uppercase tracking-tighter shared-message__play-label">Play Message</span>
+                                </>
+                            )}
                         </button>
                     ) : null}
 

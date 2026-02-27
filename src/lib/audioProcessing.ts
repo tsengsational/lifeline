@@ -110,3 +110,38 @@ export async function applyLoFiFilter(audioBlob: Blob): Promise<Blob> {
     // 8. Convert back to Blob
     return audioBufferToWavBlob(renderedBuffer);
 }
+
+// Generate a classic voicemail beep using Web Audio API
+export const playBeep = () => {
+    console.log("Beep triggered!");
+    try {
+        const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+        const context = new AudioContext();
+
+        // Resume context in case it started in suspended state
+        if (context.state === 'suspended') {
+            context.resume();
+        }
+
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, context.currentTime); // 800Hz is a standard "telephone" beep
+
+        gain.gain.setValueAtTime(2, context.currentTime);
+        // Quick fade out to avoid clicks
+        gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 0.4);
+
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+
+        oscillator.start();
+        oscillator.stop(context.currentTime + 0.4);
+
+        // Clean up context after sound finishes
+        setTimeout(() => context.close(), 500);
+    } catch (e) {
+        console.error("Failed to play beep:", e);
+    }
+};

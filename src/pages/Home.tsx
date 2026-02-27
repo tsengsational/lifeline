@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Play, UploadCloud, Square, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Play, UploadCloud, Square, RotateCcw, Pause } from 'lucide-react';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
-import { applyLoFiFilter } from '../lib/audioProcessing';
+import { applyLoFiFilter, playBeep } from '../lib/audioProcessing';
 import { supabase } from '../lib/supabase';
 
 export function Home() {
@@ -23,6 +23,8 @@ export function Home() {
     const [transcription, setTranscription] = useState('');
     const [recognition, setRecognition] = useState<any>(null);
     const [showInstructions, setShowInstructions] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
     const handleUpload = async () => {
         if (!audioBlob) return;
@@ -59,6 +61,10 @@ export function Home() {
             if (insertError) throw insertError;
 
             setShareUrl(`${window.location.origin}/message/${messageId}`);
+
+            // Success: Reset for next recording
+            clearRecording();
+            setTranscription('');
         } catch (err: any) {
             console.error('Upload failed:', err);
             alert('Upload failed: ' + err.message);
@@ -140,6 +146,39 @@ export function Home() {
             }
         }
     }, [isRecording, recognition]);
+
+
+    // Handle Preview Audio Toggle
+    const handleTogglePreview = () => {
+        if (!audioUrl) return;
+
+        if (isPlaying) {
+            audioPlayerRef.current?.pause();
+            setIsPlaying(false);
+        } else {
+            if (!audioPlayerRef.current) {
+                audioPlayerRef.current = new Audio(audioUrl);
+                audioPlayerRef.current.crossOrigin = "anonymous";
+                audioPlayerRef.current.onended = () => {
+                    setIsPlaying(false);
+                    playBeep(); // Play beep when playback reaches the end
+                };
+            }
+            audioPlayerRef.current.play();
+            setIsPlaying(true);
+        }
+    };
+
+    // Stop audio if recording starts or recording is cleared
+    useEffect(() => {
+        if (isRecording || !audioUrl) {
+            if (audioPlayerRef.current) {
+                audioPlayerRef.current.pause();
+                audioPlayerRef.current = null;
+                setIsPlaying(false);
+            }
+        }
+    }, [isRecording, audioUrl]);
 
     // Simple logic to keep the 90s digital clock updated
     useEffect(() => {
@@ -229,7 +268,7 @@ export function Home() {
 
                     {/* Record / Stop Button */}
                     <button
-                        onClick={isRecording ? stopRecording : startRecording}
+                        onClick={isRecording ? () => { stopRecording(); playBeep(); } : startRecording}
                         disabled={!!audioUrl && !isRecording}
                         className={`tactile-button answering-machine__button answering-machine__button--record text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black ${isRecording ? 'bg-red-800' : (audioUrl ? 'bg-gray-400 opacity-50' : 'bg-[#444]')}`}
                         data-purpose="record-action"
@@ -250,14 +289,20 @@ export function Home() {
                     {/* Preview or Play Random */}
                     {audioUrl ? (
                         <button
-                            onClick={() => {
-                                const audio = new Audio(audioUrl);
-                                audio.play();
-                            }}
+                            onClick={handleTogglePreview}
                             className="tactile-button answering-machine__button answering-machine__button--preview bg-blue-600 text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black"
                         >
-                            <Play className="w-6 h-6 answering-machine__button-icon" />
-                            <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Preview</span>
+                            {isPlaying ? (
+                                <>
+                                    <Pause className="w-6 h-6 answering-machine__button-icon" />
+                                    <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Pause</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="w-6 h-6 answering-machine__button-icon" />
+                                    <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Preview</span>
+                                </>
+                            )}
                         </button>
                     ) : (
                         <button
