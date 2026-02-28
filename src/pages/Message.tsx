@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Play, AlertCircle, ArrowLeft } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Play, AlertCircle, ArrowLeft, SkipForward } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { playBeep } from '../lib/audioProcessing';
 
@@ -9,8 +9,20 @@ export function Message() {
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
+    const [isFetchingNext, setIsFetchingNext] = useState(false);
+
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [audioPlayer, setAudioPlayer] = useState<HTMLAudioElement | null>(null);
 
     useEffect(() => {
+        // Reset state for new ID
+        setLoading(true);
+        setError(null);
+        setAudioUrl(null);
+        setIsPlaying(false);
+        setAudioPlayer(null); // Clear the player state so a fresh one is created for the new message
+
         async function fetchMessage() {
             if (!id) return;
 
@@ -28,7 +40,6 @@ export function Message() {
                     setError("An error occurred while fetching this message.");
                 }
             } else {
-                // If they have the link, they can listen to it.
                 setAudioUrl(data.audio_url);
             }
 
@@ -36,10 +47,15 @@ export function Message() {
         }
 
         fetchMessage();
-    }, [id]);
 
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [audioPlayer, setAudioPlayer] = useState<HTMLAudioElement | null>(null);
+        // Cleanup: stop audio when ID changes or component unmounts
+        return () => {
+            if (audioPlayer) {
+                audioPlayer.pause();
+                audioPlayer.src = '';
+            }
+        };
+    }, [id]); // Removing audioPlayer from dependencies to avoid triggering on state updates
 
     const handlePlay = () => {
         if (!audioUrl) return;
@@ -48,18 +64,70 @@ export function Message() {
             audioPlayer.pause();
             setIsPlaying(false);
         } else {
-            const player = audioPlayer || new Audio(audioUrl);
-            player.crossOrigin = "anonymous"; // Helps with cross-domain issues
-            player.onended = () => {
+            // Always ensure the player has the current audio URL
+            let player = audioPlayer;
+
+            if (!player) {
+                player = new Audio(audioUrl);
+                player.crossOrigin = "anonymous";
+                player.onended = () => {
+                    setIsPlaying(false);
+                    playBeep();
+                };
+                player.onerror = () => setIsPlaying(false);
+                setAudioPlayer(player);
+            } else if (player.src !== audioUrl) {
+                player.src = audioUrl;
+            }
+
+            player.play().catch(err => {
+                console.error("Playback failed:", err);
                 setIsPlaying(false);
-                playBeep(); // Play beep when playback reaches the end
-            };
-            player.onerror = () => setIsPlaying(false);
-
-            if (!audioPlayer) setAudioPlayer(player);
-
-            player.play().catch(console.error);
+            });
             setIsPlaying(true);
+        }
+    };
+
+    const handleNext = async () => {
+        if (isFetchingNext) return;
+        setIsFetchingNext(true);
+        try {
+            // Fetch all approved messages
+            const { data, error } = await supabase
+                .from('messages')
+                .select('id')
+                .eq('status', 'approved');
+
+            if (error) throw error;
+
+            if (!data || data.length === 0) {
+                alert("No other approved messages available yet!");
+                return;
+            }
+
+            // Filter out the current ID
+            const otherMessages = data.filter(msg => msg.id !== id);
+
+            if (otherMessages.length === 0) {
+                alert("You've reached the end of the tape! No other messages available.");
+                return;
+            }
+
+            // Pick a random message from the remaining ones
+            const randomMsg = otherMessages[Math.floor(Math.random() * otherMessages.length)];
+
+            // Stop current playback if any
+            if (audioPlayer) {
+                audioPlayer.pause();
+                setIsPlaying(false);
+            }
+
+            navigate(`/message/${randomMsg.id}`);
+        } catch (err) {
+            console.error("Error fetching next message:", err);
+            alert("Failed to find another message.");
+        } finally {
+            setIsFetchingNext(false);
         }
     };
 
@@ -115,6 +183,18 @@ export function Message() {
                             )}
                         </button>
                     ) : null}
+
+                    {/* Next Random Message Button */}
+                    <button
+                        onClick={handleNext}
+                        disabled={isFetchingNext}
+                        className={`tactile-button w-full bg-[#ffcc00] text-[#1a1a1a] py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-[#b38f00] shared-message__next-button ${isFetchingNext ? 'opacity-50' : ''}`}
+                    >
+                        <SkipForward className={`w-6 h-6 ${isFetchingNext ? 'animate-pulse' : ''}`} />
+                        <span className="text-xs font-bold uppercase tracking-tighter">
+                            {isFetchingNext ? 'Searching...' : 'Next Message'}
+                        </span>
+                    </button>
 
                     <Link to="/" className="tactile-button w-full bg-[#6b7280] text-white mt-4 py-4 rounded-xl flex items-center justify-center gap-2 border-b-4 border-black shared-message__back-link">
                         <ArrowLeft className="w-5 h-5 shared-message__back-icon" />
