@@ -1,208 +1,300 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Play, AlertCircle, ArrowLeft, SkipForward } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { playBeep } from '../lib/audioProcessing';
 
+// ── Speaker Grille ─────────────────────────────────────────────────────────────
+function SpeakerGrille() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 6px)', gap: '4px', padding: '4px' }}>
+      {Array.from({ length: 25 }).map((_, i) => (
+        <div key={i} style={{
+          width: '6px', height: '6px', borderRadius: '50%',
+          background: 'radial-gradient(circle at 30% 30%, #1a1a1a, #0a0a0a)',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.8), 0 0 0 0.5px rgba(255,255,255,0.04)',
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ── LCD Display ────────────────────────────────────────────────────────────────
+function LCDStatus({ status }: { status: 'loading' | 'ready' | 'playing' | 'error' }) {
+  const glow = 'rgba(0, 255, 100, 0.8)';
+  const label = { loading: 'WAIT', ready: 'READY', playing: 'PLAY', error: 'ERR' }[status];
+  const color = status === 'error' ? '#ff4040' : '#00ff64';
+  const shadow = status === 'error' ? '0 0 12px rgba(255,64,64,0.8)' : `0 0 16px ${glow}, 0 0 30px rgba(0,255,100,0.3)`;
+
+  return (
+    <div style={{
+      position: 'relative',
+      width: '100%',
+      background: '#060e07',
+      borderRadius: '6px',
+      padding: '16px 18px 14px',
+      border: '2px solid #0a0a0a',
+      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+      overflow: 'hidden',
+      fontFamily: "'Share Tech Mono', monospace",
+    }}>
+      {/* Scanlines */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10,
+        background: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px)',
+      }} />
+      <div style={{
+        position: 'absolute', left: 0, right: 0, height: '30%',
+        background: 'linear-gradient(0deg, transparent, rgba(0,255,100,0.03) 50%, transparent)',
+        animation: 'scanline 3s linear infinite',
+        pointerEvents: 'none', zIndex: 9,
+      }} />
+
+      <div style={{ position: 'relative', zIndex: 12 }}>
+        <span style={{ color, fontSize: '36px', letterSpacing: '0.08em', textShadow: shadow }}>
+          {label}
+        </span>
+      </div>
+      <div style={{ color: '#00aa44', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', textShadow: '0 0 6px rgba(0,200,80,0.5)', position: 'relative', zIndex: 12, marginTop: '4px' }}>
+        {status === 'loading' ? 'RETRIEVING...' : status === 'error' ? 'NOT FOUND' : 'LIFELINE ARCHIVE'}
+      </div>
+    </div>
+  );
+}
+
+// ── Hardware Button ────────────────────────────────────────────────────────────
+type ButtonColor = 'default' | 'play' | 'gold';
+
+const buttonColors = {
+  default: { bg: '#2a2a2a', top: '#3a3a3a', border: '#1a1a1a', text: '#c8c8c8', glow: 'none' },
+  play:    { bg: '#0a1410', top: '#102a18', border: '#050a08', text: '#00ff64', glow: '0 0 12px rgba(0,255,100,0.2)' },
+  gold:    { bg: '#b8920a', top: '#f0c020', border: '#8a6a00', text: '#1a1000', glow: '0 0 16px rgba(240,192,0,0.4)' },
+};
+
+function HardwareButton({ label, icon, onClick, color = 'default' as ButtonColor, disabled = false, wide = false }: {
+  label: string; icon: string; onClick?: () => void; color?: ButtonColor; disabled?: boolean; wide?: boolean;
+}) {
+  const [pressed, setPressed] = useState(false);
+  const c = buttonColors[color];
+
+  return (
+    <button
+      style={{
+        position: 'relative',
+        width: '100%',
+        padding: wide ? '16px 10px' : '14px 10px',
+        background: pressed
+          ? `linear-gradient(180deg, ${c.bg} 0%, ${c.top} 100%)`
+          : `linear-gradient(180deg, ${c.top} 0%, ${c.bg} 100%)`,
+        border: `1px solid ${c.border}`,
+        borderRadius: '8px',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'all 0.06s ease',
+        boxShadow: pressed
+          ? `inset 0 2px 4px rgba(0,0,0,0.7), ${c.glow}`
+          : `0 4px 0 ${c.border}, 0 5px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06), ${c.glow}`,
+        transform: pressed ? 'translateY(3px)' : 'translateY(0)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '5px',
+        userSelect: 'none',
+      }}
+      onPointerDown={() => { if (!disabled) setPressed(true); }}
+      onPointerUp={() => { if (!disabled) { setPressed(false); onClick?.(); } }}
+      onPointerLeave={() => setPressed(false)}
+      disabled={disabled}
+    >
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: '7px',
+        background: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.012) 2px, rgba(255,255,255,0.012) 4px)',
+        pointerEvents: 'none',
+      }} />
+      <span style={{ fontSize: '18px', color: c.text, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '9px', fontWeight: 500, letterSpacing: '0.14em', color: c.text, textTransform: 'uppercase', lineHeight: 1 }}>{label}</span>
+    </button>
+  );
+}
+
+// ── Message Page ───────────────────────────────────────────────────────────────
 export function Message() {
-    const { id } = useParams<{ id: string }>();
-    const [audioUrl, setAudioUrl] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const navigate = useNavigate();
-    const [isFetchingNext, setIsFetchingNext] = useState(false);
+  const { id } = useParams<{ id: string }>();
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioPlayer, setAudioPlayer] = useState<HTMLAudioElement | null>(null);
+  const [isFetchingNext, setIsFetchingNext] = useState(false);
+  const navigate = useNavigate();
 
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [audioPlayer, setAudioPlayer] = useState<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    setAudioUrl(null);
+    setIsPlaying(false);
+    setAudioPlayer(null);
 
-    useEffect(() => {
-        // Reset state for new ID
-        setLoading(true);
-        setError(null);
-        setAudioUrl(null);
-        setIsPlaying(false);
-        setAudioPlayer(null); // Clear the player state so a fresh one is created for the new message
+    async function fetchMessage() {
+      if (!id) return;
+      const { data, error } = await supabase
+        .from('messages').select('audio_url, status').eq('id', id).single();
+      if (error) {
+        setError(error.code === 'PGRST116'
+          ? 'Message not found. It may have been deleted or rejected.'
+          : 'An error occurred while fetching this message.');
+      } else {
+        setAudioUrl(data.audio_url);
+      }
+      setLoading(false);
+    }
 
-        async function fetchMessage() {
-            if (!id) return;
+    fetchMessage();
+    return () => { audioPlayer?.pause(); };
+  }, [id]);
 
-            const { data, error } = await supabase
-                .from('messages')
-                .select('audio_url, status')
-                .eq('id', id)
-                .single();
+  const handlePlay = () => {
+    if (!audioUrl) return;
+    if (isPlaying && audioPlayer) {
+      audioPlayer.pause();
+      setIsPlaying(false);
+      return;
+    }
+    let player = audioPlayer;
+    if (!player) {
+      player = new Audio(audioUrl);
+      player.crossOrigin = 'anonymous';
+      player.onended = () => { setIsPlaying(false); playBeep(); };
+      player.onerror = () => setIsPlaying(false);
+      setAudioPlayer(player);
+    } else if (player.src !== audioUrl) {
+      player.src = audioUrl;
+    }
+    player.play().catch(() => setIsPlaying(false));
+    setIsPlaying(true);
+  };
 
-            if (error) {
-                if (error.code === 'PGRST116') {
-                    setError("Message not found. It may have been deleted or rejected.");
-                } else {
-                    console.error("Error fetching message:", error);
-                    setError("An error occurred while fetching this message.");
-                }
-            } else {
-                setAudioUrl(data.audio_url);
-            }
+  const handleNext = async () => {
+    if (isFetchingNext) return;
+    setIsFetchingNext(true);
+    try {
+      const { data, error } = await supabase.from('messages').select('id').eq('status', 'approved');
+      if (error) throw error;
+      const others = (data || []).filter(m => m.id !== id);
+      if (others.length === 0) return;
+      audioPlayer?.pause();
+      setIsPlaying(false);
+      navigate(`/message/${others[Math.floor(Math.random() * others.length)].id}`);
+    } catch (err) {
+      console.error('Error fetching next message:', err);
+    } finally {
+      setIsFetchingNext(false);
+    }
+  };
 
-            setLoading(false);
-        }
+  const lcdStatus = loading ? 'loading' : error ? 'error' : isPlaying ? 'playing' : 'ready';
 
-        fetchMessage();
+  return (
+    <>
+      <div className="grain" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '40px 20px' }}>
+        <div style={{
+          position: 'relative',
+          width: '300px',
+          background: 'linear-gradient(160deg, #2e2e2e 0%, #1c1c1c 40%, #141414 70%, #1e1e1e 100%)',
+          borderRadius: '36px',
+          padding: '30px 28px 32px',
+          boxShadow: `
+            0 60px 100px rgba(0,0,0,0.9),
+            0 30px 50px rgba(0,0,0,0.65),
+            0 10px 20px rgba(0,0,0,0.4),
+            inset 0 1px 0 rgba(255,255,255,0.1),
+            inset 0 -2px 0 rgba(0,0,0,0.6),
+            inset 2px 0 0 rgba(255,255,255,0.05),
+            inset -2px 0 0 rgba(0,0,0,0.4)
+          `,
+          animation: 'fadeIn 0.5s ease',
+        }}>
+          {/* Left edge highlight */}
+          <div style={{
+            position: 'absolute', top: '20px', bottom: '20px', left: '1px', width: '3px',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 50%, transparent 100%)',
+            borderRadius: '2px',
+          }} />
 
-        // Cleanup: stop audio when ID changes or component unmounts
-        return () => {
-            if (audioPlayer) {
-                audioPlayer.pause();
-                audioPlayer.src = '';
-            }
-        };
-    }, [id]); // Removing audioPlayer from dependencies to avoid triggering on state updates
+          {/* Brand strip */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div>
+              <div style={{
+                fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.12em',
+                color: 'transparent', backgroundClip: 'text', WebkitBackgroundClip: 'text',
+                backgroundImage: 'linear-gradient(180deg, #c8c8c8 0%, #888 100%)', lineHeight: 1,
+              }}>LIFELINE</div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '8px', color: '#555', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '1px' }}>
+                Voice Message System
+              </div>
+            </div>
+            <SpeakerGrille />
+          </div>
 
-    const handlePlay = () => {
-        if (!audioUrl) return;
+          {/* LCD bezel */}
+          <div style={{
+            background: '#0a0a0a', borderRadius: '10px', padding: '6px',
+            boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.9), inset 0 1px 3px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.05)',
+            marginBottom: '4px',
+          }}>
+            <LCDStatus status={lcdStatus} />
+          </div>
 
-        if (isPlaying && audioPlayer) {
-            audioPlayer.pause();
-            setIsPlaying(false);
-        } else {
-            // Always ensure the player has the current audio URL
-            let player = audioPlayer;
+          {/* Error text */}
+          {error && (
+            <div style={{ textAlign: 'center', fontFamily: "'DM Sans', sans-serif", fontSize: '9px', color: '#ff4040', letterSpacing: '0.08em', margin: '8px 0 0', lineHeight: 1.4 }}>
+              {error}
+            </div>
+          )}
 
-            if (!player) {
-                player = new Audio(audioUrl);
-                player.crossOrigin = "anonymous";
-                player.onended = () => {
-                    setIsPlaying(false);
-                    playBeep();
-                };
-                player.onerror = () => setIsPlaying(false);
-                setAudioPlayer(player);
-            } else if (player.src !== audioUrl) {
-                player.src = audioUrl;
-            }
+          {/* Divider */}
+          <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #333, transparent)', margin: '14px 0 16px' }} />
 
-            player.play().catch(err => {
-                console.error("Playback failed:", err);
-                setIsPlaying(false);
-            });
-            setIsPlaying(true);
-        }
-    };
+          {/* Controls */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {!error && (
+              <HardwareButton
+                label={isPlaying ? 'Pause' : (loading ? 'Loading…' : 'Play Message')}
+                icon={isPlaying ? '■' : '▶'}
+                color="play"
+                onClick={handlePlay}
+                disabled={loading || !audioUrl}
+              />
+            )}
 
-    const handleNext = async () => {
-        if (isFetchingNext) return;
-        setIsFetchingNext(true);
-        try {
-            // Fetch all approved messages
-            const { data, error } = await supabase
-                .from('messages')
-                .select('id')
-                .eq('status', 'approved');
+            <HardwareButton
+              label={isFetchingNext ? 'Searching…' : 'Next Message'}
+              icon="⏭"
+              color="gold"
+              onClick={handleNext}
+              disabled={isFetchingNext}
+              wide
+            />
 
-            if (error) throw error;
+            <Link to="/" style={{ textDecoration: 'none' }}>
+              <HardwareButton
+                label="Record Your Own"
+                icon="←"
+                color="default"
+              />
+            </Link>
+          </div>
 
-            if (!data || data.length === 0) {
-                alert("No other approved messages available yet!");
-                return;
-            }
+          {/* Bottom divider */}
+          <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #2a2a2a, transparent)', margin: '20px 0 0' }} />
 
-            // Filter out the current ID
-            const otherMessages = data.filter(msg => msg.id !== id);
-
-            if (otherMessages.length === 0) {
-                alert("You've reached the end of the tape! No other messages available.");
-                return;
-            }
-
-            // Pick a random message from the remaining ones
-            const randomMsg = otherMessages[Math.floor(Math.random() * otherMessages.length)];
-
-            // Stop current playback if any
-            if (audioPlayer) {
-                audioPlayer.pause();
-                setIsPlaying(false);
-            }
-
-            navigate(`/message/${randomMsg.id}`);
-        } catch (err) {
-            console.error("Error fetching next message:", err);
-            alert("Failed to find another message.");
-        } finally {
-            setIsFetchingNext(false);
-        }
-    };
-
-    return (
-        <>
-            <div className="grain shared-message__grain"></div>
-            <main className="plastic-body shared-message__shell w-[90%] max-w-[400px] p-8 flex flex-col items-center gap-6 border-2 border-[#b3a79a]" data-purpose="shared-message-shell">
-
-                <section className="w-full flex justify-between items-start mb-4 shared-message__header" data-purpose="device-header">
-                    <div className="bg-black p-3 rounded-lg border-4 border-[#8e857b] shadow-inner shared-message__display" data-purpose="status-display">
-                        <div className="digital-font text-red-600 text-3xl leading-none tracking-widest uppercase shared-message__status">
-                            {loading ? 'WAIT' : audioUrl ? (isPlaying ? 'PLAY' : 'STOP') : 'ERR'}
-                        </div>
-                        <div className="text-[10px] text-red-900 font-bold uppercase mt-1 shared-message__status-label">Status</div>
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-2 p-2 bg-[#c0b5a8] rounded-full border border-[#a1978b] shared-message__speaker" data-purpose="voicemail-speaker">
-                        {Array.from({ length: 16 }).map((_, i) => (
-                            <div key={i} className="speaker-hole shared-message__speaker-hole"></div>
-                        ))}
-                    </div>
-                </section>
-
-                <div className="w-full text-left px-2 shared-message__brand">
-                    <span className="font-serif italic font-black text-[#8e857b] text-xl opacity-60 shared-message__brand-text">SHARED MEMO</span>
-                </div>
-
-                <section className="w-full mt-4 flex flex-col gap-4 shared-message__controls" data-purpose="control-panel">
-                    {loading ? (
-                        <div className="text-[#1a1a1a] text-center font-bold digital-font text-2xl animate-pulse shared-message__loading">
-                            RETRIEVING TAPE...
-                        </div>
-                    ) : error ? (
-                        <div className="bg-[#cc3333] text-white p-4 rounded-xl shadow-inner border-2 border-black flex flex-col items-center gap-2 text-center shared-message__error">
-                            <AlertCircle className="shared-message__error-icon" />
-                            <p className="text-xs font-bold uppercase tracking-tighter shared-message__error-text">{error}</p>
-                        </div>
-                    ) : audioUrl ? (
-                        <button
-                            onClick={handlePlay}
-                            className="tactile-button w-full bg-[#338833] text-white py-6 rounded-xl flex flex-col items-center justify-center gap-2 border-b-4 border-black shared-message__play-button"
-                        >
-                            {isPlaying ? (
-                                <>
-                                    <AlertCircle className="w-8 h-8 animate-pulse shared-message__play-icon" />
-                                    <span className="text-sm font-bold uppercase tracking-tighter shared-message__play-label">Pause Message</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Play className="w-8 h-8 shared-message__play-icon" />
-                                    <span className="text-sm font-bold uppercase tracking-tighter shared-message__play-label">Play Message</span>
-                                </>
-                            )}
-                        </button>
-                    ) : null}
-
-                    {/* Next Random Message Button */}
-                    <button
-                        onClick={handleNext}
-                        disabled={isFetchingNext}
-                        className={`tactile-button w-full bg-[#ffcc00] text-[#1a1a1a] py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-[#b38f00] shared-message__next-button ${isFetchingNext ? 'opacity-50' : ''}`}
-                    >
-                        <SkipForward className={`w-6 h-6 ${isFetchingNext ? 'animate-pulse' : ''}`} />
-                        <span className="text-xs font-bold uppercase tracking-tighter">
-                            {isFetchingNext ? 'Searching...' : 'Next Message'}
-                        </span>
-                    </button>
-
-                    <Link to="/" className="tactile-button w-full bg-[#6b7280] text-white mt-4 py-4 rounded-xl flex items-center justify-center gap-2 border-b-4 border-black shared-message__back-link">
-                        <ArrowLeft className="w-5 h-5 shared-message__back-icon" />
-                        <span className="text-xs font-bold uppercase tracking-tighter shared-message__back-label">Record Your Own</span>
-                    </Link>
-                </section>
-
-            </main>
-        </>
-    );
+          {/* Bottom nub */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+            <div style={{
+              width: '40px', height: '8px', borderRadius: '4px',
+              background: 'linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)',
+              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04)',
+            }} />
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }

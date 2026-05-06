@@ -2,237 +2,325 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Check, X, RefreshCw, LogIn, Loader2 } from 'lucide-react';
 
+const mono: React.CSSProperties = { fontFamily: "'Share Tech Mono', monospace" };
+const sans: React.CSSProperties = { fontFamily: "'DM Sans', sans-serif" };
+
 export function Admin() {
-    const [session, setSession] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [messages, setMessages] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'pending' | 'managed'>('pending');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [authError, setAuthError] = useState('');
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'pending' | 'managed'>('pending');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
 
-    useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            if (session) fetchMessages();
-            setLoading(false);
-        });
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchMessages();
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) fetchMessages();
+    });
+    return () => subscription.unsubscribe();
+  }, [activeTab]);
 
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            if (session) fetchMessages();
-        });
-
-        return () => subscription.unsubscribe();
-    }, [activeTab]); // Refetch when tab changes
-
-    const fetchMessages = async () => {
-        let query = supabase
-            .from('messages')
-            .select('id, audio_url, transcription, status, created_at')
-            .order('created_at', { ascending: false });
-
-        if (activeTab === 'pending') {
-            query = query.eq('status', 'pending');
-        } else {
-            query = query.in('status', ['approved', 'inactive']);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching messages:', error);
-        } else {
-            setMessages(data || []);
-        }
-    };
-
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setAuthError('');
-        setLoading(true);
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
-        if (error) setAuthError(error.message);
-        setLoading(false);
-    };
-
-    const handleApprove = async (id: string) => {
-        const { error } = await supabase
-            .from('messages')
-            .update({ status: 'approved' })
-            .eq('id', id);
-        if (!error) fetchMessages();
-    };
-
-    const handleToggleActive = async (id: string, currentStatus: string) => {
-        const newStatus = currentStatus === 'approved' ? 'inactive' : 'approved';
-        const { error } = await supabase
-            .from('messages')
-            .update({ status: newStatus })
-            .eq('id', id);
-        if (!error) fetchMessages();
-    };
-
-    const handleReject = async (id: string, audioUrl: string) => {
-        try {
-            const urlParts = audioUrl.split('/');
-            const fileName = urlParts[urlParts.length - 1];
-
-            if (fileName) {
-                await supabase.storage.from('voicemails').remove([fileName]);
-            }
-
-            const { error } = await supabase
-                .from('messages')
-                .delete()
-                .eq('id', id);
-
-            if (!error) fetchMessages();
-        } catch (err) {
-            console.error('Error deleting file: ', err);
-        }
-    };
-
-    if (loading) {
-        return <div className="min-h-screen grow flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+  const fetchMessages = async () => {
+    let query = supabase.from('messages')
+      .select('id, audio_url, transcription, status, created_at')
+      .order('created_at', { ascending: false });
+    if (activeTab === 'pending') {
+      query = query.eq('status', 'pending');
+    } else {
+      query = query.in('status', ['approved', 'inactive']);
     }
+    const { data, error } = await query;
+    if (!error) setMessages(data || []);
+  };
 
-    if (!session) {
-        return (
-            <div className="min-h-screen w-full flex items-center justify-center p-4 admin-terminal admin-terminal--login">
-                <form onSubmit={handleLogin} className="bg-[#2c341b] p-8 rounded-xl border-4 border-[#1a1f10] shadow-2xl flex flex-col gap-4 text-white font-mono w-full max-w-sm admin-terminal__login-form">
-                    <h2 className="text-2xl mb-4 font-bold flex items-center gap-2 admin-terminal__login-title"><LogIn /> SYSTEM LOGIN</h2>
-                    {authError && <div className="bg-red-900/50 p-2 text-red-200 border border-red-500 rounded admin-terminal__login-error">{authError}</div>}
-                    <input
-                        type="email"
-                        placeholder="ACCESS CODE (EMAIL)"
-                        className="p-3 bg-black/50 border border-[#556b2f] rounded admin-terminal__login-input"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                    />
-                    <input
-                        type="password"
-                        placeholder="PASSWORD"
-                        className="p-3 bg-black/50 border border-[#556b2f] rounded admin-terminal__login-input"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                    />
-                    <button type="submit" className="bg-[#556b2f] hover:bg-[#6b8e23] p-3 text-xl font-bold rounded mt-2 cursor-pointer transition-colors admin-terminal__login-button">
-                        AUTHENTICATE
-                    </button>
-                </form>
-            </div>
-        );
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setAuthError(error.message);
+    setLoading(false);
+  };
+
+  const handleApprove = async (id: string) => {
+    const { error } = await supabase.from('messages').update({ status: 'approved' }).eq('id', id);
+    if (!error) fetchMessages();
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'approved' ? 'inactive' : 'approved';
+    const { error } = await supabase.from('messages').update({ status: newStatus }).eq('id', id);
+    if (!error) fetchMessages();
+  };
+
+  const handleReject = async (id: string, audioUrl: string) => {
+    try {
+      const fileName = audioUrl.split('/').pop();
+      if (fileName) await supabase.storage.from('voicemails').remove([fileName]);
+      const { error } = await supabase.from('messages').delete().eq('id', id);
+      if (!error) fetchMessages();
+    } catch (err) {
+      console.error('Error deleting:', err);
     }
+  };
 
+  if (loading) {
     return (
-        <div className="min-h-screen w-full p-8 text-white font-mono max-w-4xl mx-auto admin-terminal">
-            <div className="flex flex-col gap-6 mb-8 border-b border-[#556b2f] bg-[#2c341b]/80 p-6 rounded-lg shadow-lg admin-terminal__header">
-                <div className="flex justify-between items-center admin-terminal__header-top">
-                    <h1 className="text-3xl font-bold tracking-widest uppercase admin-terminal__title">Memo-Tone Terminal</h1>
-                    <button
-                        onClick={fetchMessages}
-                        className="flex items-center gap-2 bg-[#556b2f] hover:bg-[#6b8e23] px-4 py-2 rounded shadow-md transition-colors admin-terminal__refresh-button"
-                    >
-                        <RefreshCw className="w-4 h-4" /> REFRESH
-                    </button>
-                </div>
-
-                <div className="flex gap-4 border-b border-[#556b2f]/30 admin-terminal__tabs">
-                    <button
-                        onClick={() => setActiveTab('pending')}
-                        className={`pb-2 px-4 font-bold border-b-2 transition-all admin-terminal__tab ${activeTab === 'pending' ? 'border-[#6b8e23] text-[#6b8e23] admin-terminal__tab--active' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
-                    >
-                        PENDING APPROVAL
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('managed')}
-                        className={`pb-2 px-4 font-bold border-b-2 transition-all admin-terminal__tab ${activeTab === 'managed' ? 'border-[#6b8e23] text-[#6b8e23] admin-terminal__tab--active' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
-                    >
-                        MANAGED RECORDINGS
-                    </button>
-                </div>
-            </div>
-
-            {messages.length === 0 ? (
-                <div className="text-center p-12 bg-black/30 rounded border border-[#556b2f] flex flex-col items-center justify-center gap-4 admin-terminal__empty-state">
-                    <span className="text-4xl admin-terminal__empty-icon">📭</span>
-                    <p className="text-xl admin-terminal__empty-text">NO {activeTab.toUpperCase()} MESSAGES DETECTED.</p>
-                </div>
-            ) : (
-                <div className="space-y-4 admin-terminal__list">
-                    {messages.map((msg) => (
-                        <div key={msg.id} className="bg-[#2c341b] border-2 border-[#556b2f] p-4 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4 admin-terminal__item">
-
-                            <div className="flex flex-col grow min-w-0 break-all w-full admin-terminal__item-content">
-                                <div className="flex justify-between items-center mb-2 admin-terminal__item-header">
-                                    <span className="text-xs text-[#b3a79a] font-sans admin-terminal__timestamp">{new Date(msg.created_at).toLocaleString()}</span>
-                                    {activeTab === 'managed' && (
-                                        <span className={`text-[10px] px-2 py-0.5 rounded font-sans font-bold uppercase admin-terminal__status-badge ${msg.status === 'approved' ? 'bg-green-900/40 text-green-400' : 'bg-yellow-900/40 text-yellow-500'}`}>
-                                            {msg.status === 'approved' ? 'Active' : 'Inactive'}
-                                        </span>
-                                    )}
-                                </div>
-                                {/* Standard HTML Audio Player */}
-                                <audio controls src={msg.audio_url} className="w-full grayscale invert hue-rotate-[180deg] contrast-125 admin-terminal__audio" />
-
-                                {/* Transcription Display */}
-                                {msg.transcription ? (
-                                    <div className="mt-4 p-3 bg-black/40 border border-[#556b2f] rounded text-green-400 text-sm whitespace-pre-wrap font-mono admin-terminal__transcription">
-                                        <div className="text-[10px] text-[#556b2f] mb-1 uppercase tracking-widest border-b border-[#556b2f]/30 pb-1 font-sans admin-terminal__transcription-title">User Transcription</div>
-                                        <div className="admin-terminal__transcription-text">"{msg.transcription}"</div>
-                                    </div>
-                                ) : (
-                                    <div className="mt-4 p-3 bg-black/20 border border-dashed border-[#556b2f]/30 rounded text-[#556b2f] text-[10px] uppercase text-center tracking-widest font-sans admin-terminal__transcription-empty">
-                                        No transcription captured
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex gap-2 w-full md:w-auto shrink-0 mt-4 md:mt-0 admin-terminal__actions">
-                                {activeTab === 'pending' ? (
-                                    <>
-                                        <button
-                                            onClick={() => handleApprove(msg.id)}
-                                            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-700 hover:bg-green-600 px-6 py-4 rounded font-bold shadow-inner admin-terminal__button admin-terminal__button--approve"
-                                        >
-                                            <Check /> APPROVE
-                                        </button>
-                                        <button
-                                            onClick={() => handleReject(msg.id, msg.audio_url)}
-                                            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-700 hover:bg-red-600 px-6 py-4 rounded font-bold shadow-inner admin-terminal__button admin-terminal__button--reject"
-                                        >
-                                            <X /> REJECT
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <button
-                                            onClick={() => handleToggleActive(msg.id, msg.status)}
-                                            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-4 rounded font-bold shadow-inner transition-colors admin-terminal__button ${msg.status === 'approved' ? 'bg-yellow-700 hover:bg-yellow-600 admin-terminal__button--deactivate' : 'bg-[#6b8e23] hover:bg-[#556b2f] admin-terminal__button--reactivate'}`}
-                                        >
-                                            {msg.status === 'approved' ? <><X className="w-4 h-4" /> DEACTIVATE</> : <><Check className="w-4 h-4" /> REACTIVATE</>}
-                                        </button>
-                                        <button
-                                            onClick={() => handleReject(msg.id, msg.audio_url)}
-                                            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-900/50 hover:bg-red-800 px-4 py-4 rounded font-bold border border-red-700/50 transition-colors admin-terminal__button admin-terminal__button--delete"
-                                            title="Permanently Delete"
-                                        >
-                                            <X />
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 style={{ color: '#00ff64', width: 32, height: 32, animation: 'spin 1s linear infinite' }} />
+      </div>
     );
+  }
+
+  if (!session) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <form onSubmit={handleLogin} style={{
+          background: 'linear-gradient(160deg, #181818 0%, #101010 100%)',
+          border: '1px solid #2a2a2a',
+          borderRadius: '16px',
+          padding: '36px 32px',
+          width: '100%',
+          maxWidth: '340px',
+          boxShadow: '0 40px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            <LogIn style={{ color: '#00ff64', width: 20, height: 20 }} />
+            <span style={{ ...mono, color: '#00ff64', fontSize: '18px', letterSpacing: '0.15em' }}>SYSTEM LOGIN</span>
+          </div>
+
+          {authError && (
+            <div style={{ ...sans, background: 'rgba(255,64,64,0.1)', border: '1px solid rgba(255,64,64,0.3)', borderRadius: '6px', padding: '10px 12px', color: '#ff6060', fontSize: '12px' }}>
+              {authError}
+            </div>
+          )}
+
+          <input
+            type="email"
+            placeholder="ACCESS CODE (EMAIL)"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            style={{
+              ...mono, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px',
+              padding: '12px 14px', color: '#00ff64', fontSize: '12px', letterSpacing: '0.05em',
+              outline: 'none',
+            }}
+          />
+          <input
+            type="password"
+            placeholder="PASSWORD"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            style={{
+              ...mono, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px',
+              padding: '12px 14px', color: '#00ff64', fontSize: '12px', letterSpacing: '0.05em',
+              outline: 'none',
+            }}
+          />
+          <button type="submit" style={{
+            ...mono, background: 'linear-gradient(180deg, #102a18 0%, #0a1410 100%)',
+            border: '1px solid #050a08', borderRadius: '8px',
+            padding: '14px', color: '#00ff64', fontSize: '13px', letterSpacing: '0.2em',
+            cursor: 'pointer', marginTop: '4px',
+            boxShadow: '0 4px 0 #050a08, 0 5px 8px rgba(0,0,0,0.6)',
+          }}>
+            AUTHENTICATE
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', padding: '32px 24px', maxWidth: '900px', margin: '0 auto' }}>
+
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(160deg, #181818 0%, #101010 100%)',
+        border: '1px solid #2a2a2a',
+        borderRadius: '12px',
+        padding: '20px 24px',
+        marginBottom: '24px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div>
+            <div style={{ ...{ fontFamily: "'Bebas Neue', sans-serif" }, fontSize: '28px', letterSpacing: '0.15em', color: 'transparent', backgroundClip: 'text', WebkitBackgroundClip: 'text', backgroundImage: 'linear-gradient(180deg, #c8c8c8 0%, #888 100%)' }}>
+              LIFELINE TERMINAL
+            </div>
+            <div style={{ ...sans, fontSize: '9px', color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '2px' }}>Admin Message Management</div>
+          </div>
+          <button
+            onClick={fetchMessages}
+            style={{
+              ...sans, display: 'flex', alignItems: 'center', gap: '6px',
+              background: 'linear-gradient(180deg, #102a18 0%, #0a1410 100%)',
+              border: '1px solid #050a08', borderRadius: '8px',
+              padding: '8px 14px', color: '#00ff64', fontSize: '10px', fontWeight: 500,
+              letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
+              boxShadow: '0 3px 0 #050a08, 0 4px 6px rgba(0,0,0,0.5)',
+            }}
+          >
+            <RefreshCw style={{ width: 12, height: 12 }} /> REFRESH
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '4px', borderTop: '1px solid #1a1a1a', paddingTop: '16px' }}>
+          {(['pending', 'managed'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                ...mono, padding: '6px 16px', fontSize: '11px', letterSpacing: '0.1em',
+                background: activeTab === tab ? 'rgba(0,255,100,0.08)' : 'transparent',
+                border: 'none', borderBottom: `2px solid ${activeTab === tab ? '#00ff64' : 'transparent'}`,
+                color: activeTab === tab ? '#00ff64' : '#555',
+                cursor: 'pointer', transition: 'all 0.15s', textTransform: 'uppercase',
+              }}
+            >
+              {tab === 'pending' ? 'PENDING APPROVAL' : 'MANAGED RECORDINGS'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Message list */}
+      {messages.length === 0 ? (
+        <div style={{
+          ...mono, textAlign: 'center', padding: '48px',
+          background: 'rgba(0,0,0,0.3)', borderRadius: '10px',
+          border: '1px solid #1a1a1a', color: '#333', fontSize: '16px', letterSpacing: '0.1em',
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>📭</div>
+          NO {activeTab.toUpperCase()} MESSAGES DETECTED.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {messages.map(msg => (
+            <div key={msg.id} style={{
+              background: 'linear-gradient(160deg, #181818 0%, #101010 100%)',
+              border: '1px solid #2a2a2a',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column' as const,
+              gap: '12px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ ...sans, fontSize: '10px', color: '#444', letterSpacing: '0.06em' }}>
+                  {new Date(msg.created_at).toLocaleString()}
+                </span>
+                {activeTab === 'managed' && (
+                  <span style={{
+                    ...sans, fontSize: '9px', fontWeight: 600, letterSpacing: '0.1em',
+                    textTransform: 'uppercase', padding: '2px 8px', borderRadius: '4px',
+                    background: msg.status === 'approved' ? 'rgba(0,255,100,0.1)' : 'rgba(255,200,0,0.1)',
+                    color: msg.status === 'approved' ? '#00ff64' : '#ffcc00',
+                    border: `1px solid ${msg.status === 'approved' ? 'rgba(0,255,100,0.2)' : 'rgba(255,200,0,0.2)'}`,
+                  }}>
+                    {msg.status === 'approved' ? 'Active' : 'Inactive'}
+                  </span>
+                )}
+              </div>
+
+              <audio controls src={msg.audio_url} style={{ width: '100%', filter: 'invert(1) hue-rotate(180deg) contrast(0.8)' }} />
+
+              {msg.transcription ? (
+                <div style={{
+                  background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px',
+                  padding: '10px 14px',
+                }}>
+                  <div style={{ ...sans, fontSize: '9px', color: '#333', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '6px' }}>Transcription</div>
+                  <div style={{ ...mono, fontSize: '12px', color: '#00aa44', lineHeight: 1.6 }}>"{msg.transcription}"</div>
+                </div>
+              ) : (
+                <div style={{ ...sans, fontSize: '9px', color: '#2a2a2a', textAlign: 'center', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '8px', border: '1px dashed #1a1a1a', borderRadius: '6px' }}>
+                  No transcription captured
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {activeTab === 'pending' ? (
+                  <>
+                    <button
+                      onClick={() => handleApprove(msg.id)}
+                      style={{
+                        ...sans, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        background: 'linear-gradient(180deg, #102a18 0%, #0a1410 100%)',
+                        border: '1px solid #050a08', borderRadius: '8px',
+                        padding: '12px', color: '#00ff64', fontSize: '11px', fontWeight: 600,
+                        letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
+                        boxShadow: '0 3px 0 #050a08',
+                      }}
+                    >
+                      <Check style={{ width: 14, height: 14 }} /> APPROVE
+                    </button>
+                    <button
+                      onClick={() => handleReject(msg.id, msg.audio_url)}
+                      style={{
+                        ...sans, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        background: 'linear-gradient(180deg, #2a0808 0%, #1a0505 100%)',
+                        border: '1px solid #0a0505', borderRadius: '8px',
+                        padding: '12px', color: '#ff6060', fontSize: '11px', fontWeight: 600,
+                        letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
+                        boxShadow: '0 3px 0 #0a0505',
+                      }}
+                    >
+                      <X style={{ width: 14, height: 14 }} /> REJECT
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleToggleActive(msg.id, msg.status)}
+                      style={{
+                        ...sans, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        background: msg.status === 'approved'
+                          ? 'linear-gradient(180deg, #2a1a00 0%, #1a1000 100%)'
+                          : 'linear-gradient(180deg, #102a18 0%, #0a1410 100%)',
+                        border: `1px solid ${msg.status === 'approved' ? '#0a0800' : '#050a08'}`,
+                        borderRadius: '8px', padding: '12px',
+                        color: msg.status === 'approved' ? '#ffcc00' : '#00ff64',
+                        fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em',
+                        textTransform: 'uppercase', cursor: 'pointer',
+                        boxShadow: `0 3px 0 ${msg.status === 'approved' ? '#0a0800' : '#050a08'}`,
+                      }}
+                    >
+                      {msg.status === 'approved'
+                        ? <><X style={{ width: 14, height: 14 }} /> DEACTIVATE</>
+                        : <><Check style={{ width: 14, height: 14 }} /> REACTIVATE</>}
+                    </button>
+                    <button
+                      onClick={() => handleReject(msg.id, msg.audio_url)}
+                      title="Permanently Delete"
+                      style={{
+                        ...sans, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(255,64,64,0.06)', border: '1px solid rgba(255,64,64,0.15)',
+                        borderRadius: '8px', padding: '12px 16px', color: '#ff4040',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <X style={{ width: 14, height: 14 }} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
