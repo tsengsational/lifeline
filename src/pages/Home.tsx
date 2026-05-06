@@ -1,374 +1,691 @@
-import { useState, useEffect, useRef } from 'react';
-import { Play, UploadCloud, Square, RotateCcw, Pause } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { applyLoFiFilter, playBeep } from '../lib/audioProcessing';
 import { supabase } from '../lib/supabase';
 
+// ── Utility ───────────────────────────────────────────────────────────────────
+function formatTime(secs: number) {
+  const m = String(Math.floor(secs / 60)).padStart(2, '0');
+  const s = String(Math.floor(secs % 60)).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// ── LCD Display ───────────────────────────────────────────────────────────────
+interface LCDDisplayProps {
+  messageCount: number;
+  recordingTime: number;
+  isRecording: boolean;
+  isPlaying: boolean;
+  playTime: number;
+  hasRecording: boolean;
+  statusMsg: string;
+}
+
+function LCDDisplay({ messageCount, recordingTime, isRecording, isPlaying, playTime, hasRecording, statusMsg }: LCDDisplayProps) {
+  const [clockTime, setClockTime] = useState('');
+  const [colonOn, setColonOn] = useState(true);
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      setClockTime(`${h} ${m}`);
+      setColonOn(now.getSeconds() % 2 === 0);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, []);
+
+  const glow = 'rgba(0, 255, 100, 0.8)';
+
+  return (
+    <div style={{
+      position: 'relative',
+      width: '100%',
+      background: '#060e07',
+      borderRadius: '6px',
+      padding: '16px 18px 14px',
+      border: '2px solid #0a0a0a',
+      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+      overflow: 'hidden',
+      fontFamily: "'Share Tech Mono', monospace",
+    }}>
+      {/* Scanline overlay */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10,
+        background: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px)',
+      }} />
+      {/* Moving scanline */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, height: '30%',
+        background: 'linear-gradient(0deg, transparent, rgba(0,255,100,0.03) 50%, transparent)',
+        animation: 'scanline 3s linear infinite',
+        pointerEvents: 'none', zIndex: 9,
+      }} />
+      {/* Reflection */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: '40%',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%)',
+        pointerEvents: 'none', zIndex: 11, borderRadius: '4px',
+      }} />
+
+      {/* Time / status line */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginBottom: '6px', position: 'relative', zIndex: 12 }}>
+        {isRecording ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+            <span style={{ color: '#ff4040', fontSize: '11px', letterSpacing: '0.1em', textShadow: '0 0 8px #ff4040', animation: 'record-pulse 0.8s ease-in-out infinite' }}>● REC</span>
+            <span style={{ color: '#00ff64', fontSize: '28px', letterSpacing: '0.08em', textShadow: `0 0 12px ${glow}` }}>{formatTime(recordingTime)}</span>
+          </div>
+        ) : isPlaying ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+            <span style={{ color: '#00ff64', fontSize: '11px', letterSpacing: '0.1em', textShadow: `0 0 8px ${glow}` }}>▶ PLAY</span>
+            <span style={{ color: '#00ff64', fontSize: '28px', letterSpacing: '0.08em', textShadow: `0 0 12px ${glow}` }}>{formatTime(playTime)}</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+            <span style={{ color: '#00ff64', fontSize: '36px', letterSpacing: '0.05em', textShadow: `0 0 16px ${glow}, 0 0 30px rgba(0,255,100,0.3)` }}>
+              {clockTime.split(' ')[0]}
+            </span>
+            <span style={{
+              color: colonOn ? '#00ff64' : '#001808',
+              fontSize: '32px', width: '14px', textAlign: 'center', lineHeight: 1,
+              textShadow: colonOn ? `0 0 18px ${glow}, 0 0 8px ${glow}` : 'none',
+              transition: 'color 0.05s, text-shadow 0.05s',
+              display: 'inline-block', marginBottom: '2px', flexShrink: 0,
+            }}>:</span>
+            <span style={{ color: '#00ff64', fontSize: '36px', letterSpacing: '0.05em', textShadow: `0 0 16px ${glow}, 0 0 30px rgba(0,255,100,0.3)` }}>
+              {clockTime.split(' ')[1]}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom info row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 12 }}>
+        <span style={{ color: '#00aa44', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', textShadow: '0 0 6px rgba(0,200,80,0.5)' }}>
+          MESSAGES: {String(messageCount).padStart(2, '0')}
+        </span>
+        {statusMsg && (
+          <span style={{ color: '#00aa44', fontSize: '10px', letterSpacing: '0.08em', textShadow: '0 0 6px rgba(0,200,80,0.5)' }}>
+            {statusMsg}
+          </span>
+        )}
+        {hasRecording && !statusMsg && (
+          <span style={{ color: '#ff8040', fontSize: '10px', letterSpacing: '0.08em', textShadow: '0 0 6px rgba(255,128,0,0.5)' }}>
+            READY
+          </span>
+        )}
+      </div>
+
+      {/* Waveform when recording */}
+      {isRecording && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '6px', height: '16px', position: 'relative', zIndex: 12 }}>
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div key={i} style={{
+              width: '3px',
+              background: '#00ff64',
+              borderRadius: '1px',
+              boxShadow: '0 0 4px rgba(0,255,100,0.6)',
+              animationName: 'waveform',
+              animationDuration: `${0.3 + (i * 0.037 % 0.5)}s`,
+              animationTimingFunction: 'ease-in-out',
+              animationIterationCount: 'infinite',
+              animationDelay: `${i * 0.04}s`,
+              height: '100%',
+              transformOrigin: 'bottom',
+            }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Hardware Button ────────────────────────────────────────────────────────────
+type ButtonColor = 'default' | 'record' | 'play' | 'save';
+
+interface HardwareButtonProps {
+  label: string;
+  icon: string;
+  onClick?: () => void;
+  color?: ButtonColor;
+  disabled?: boolean;
+}
+
+const buttonColors: Record<ButtonColor, { bg: string; top: string; border: string; text: string; glow: string }> = {
+  default: { bg: '#2a2a2a', top: '#3a3a3a', border: '#1a1a1a', text: '#c8c8c8', glow: 'none' },
+  record:  { bg: '#1a0a0a', top: '#3a1010', border: '#0a0505', text: '#ff6060', glow: '0 0 12px rgba(255,60,60,0.3)' },
+  play:    { bg: '#0a1410', top: '#102a18', border: '#050a08', text: '#00ff64', glow: '0 0 12px rgba(0,255,100,0.2)' },
+  save:    { bg: '#0a0e1a', top: '#101830', border: '#050810', text: '#6080ff', glow: '0 0 12px rgba(80,120,255,0.2)' },
+};
+
+function HardwareButton({ label, icon, onClick, color = 'default', disabled = false }: HardwareButtonProps) {
+  const [pressed, setPressed] = useState(false);
+  const c = buttonColors[color];
+
+  return (
+    <button
+      style={{
+        position: 'relative',
+        width: '100%',
+        padding: '14px 10px',
+        background: pressed
+          ? `linear-gradient(180deg, ${c.bg} 0%, ${c.top} 100%)`
+          : `linear-gradient(180deg, ${c.top} 0%, ${c.bg} 100%)`,
+        border: `1px solid ${c.border}`,
+        borderRadius: '8px',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'all 0.06s ease',
+        boxShadow: pressed
+          ? `inset 0 2px 4px rgba(0,0,0,0.7), ${c.glow}`
+          : `0 4px 0 ${c.border}, 0 5px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06), ${c.glow}`,
+        transform: pressed ? 'translateY(3px)' : 'translateY(0)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '5px',
+        userSelect: 'none',
+      }}
+      onPointerDown={() => { if (!disabled) setPressed(true); }}
+      onPointerUp={() => { if (!disabled) { setPressed(false); onClick?.(); } }}
+      onPointerLeave={() => setPressed(false)}
+      disabled={disabled}
+    >
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: '7px',
+        background: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.012) 2px, rgba(255,255,255,0.012) 4px)',
+        pointerEvents: 'none',
+      }} />
+      <span style={{ fontSize: '18px', color: c.text, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '9px', fontWeight: 500, letterSpacing: '0.14em', color: c.text, textTransform: 'uppercase', lineHeight: 1 }}>{label}</span>
+    </button>
+  );
+}
+
+// ── Speaker Grille ─────────────────────────────────────────────────────────────
+function SpeakerGrille() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 6px)', gap: '4px', padding: '4px' }}>
+      {Array.from({ length: 25 }).map((_, i) => (
+        <div key={i} style={{
+          width: '6px', height: '6px', borderRadius: '50%',
+          background: 'radial-gradient(circle at 30% 30%, #1a1a1a, #0a0a0a)',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.8), 0 0 0 0.5px rgba(255,255,255,0.04)',
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ── Sticky Note ────────────────────────────────────────────────────────────────
+function StickyNote({ onClick }: { onClick: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        position: 'absolute',
+        top: '-18px',
+        right: '-22px',
+        width: '88px',
+        background: 'linear-gradient(145deg, #f5e97a, #e8d555)',
+        borderRadius: '2px',
+        padding: '10px 10px 14px',
+        transform: 'rotate(4deg)',
+        cursor: 'pointer',
+        zIndex: 20,
+        boxShadow: '2px 4px 12px rgba(0,0,0,0.45), inset 0 -2px 4px rgba(0,0,0,0.08)',
+        animation: 'stickyDrop 0.5s ease-out 0.3s both',
+        userSelect: 'none',
+      }}
+    >
+      <div style={{
+        position: 'absolute', top: '-6px', left: '50%', transform: 'translateX(-50%)',
+        width: '30px', height: '12px',
+        background: 'rgba(200,220,255,0.45)',
+        borderRadius: '2px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+      }} />
+      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '10px', fontWeight: 700, color: '#2a1a00', marginBottom: '3px', letterSpacing: '0.02em' }}>Read Me!</div>
+      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '8px', fontWeight: 400, color: '#4a3000', letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.4 }}>Instructions</div>
+    </div>
+  );
+}
+
+// ── Instructions Modal ─────────────────────────────────────────────────────────
+function InstructionsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.75)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      animation: 'fadeIn 0.2s ease',
+      backdropFilter: 'blur(4px)',
+    }} onClick={onClose}>
+      <div style={{
+        background: 'linear-gradient(160deg, #f5e97a 0%, #e8d555 100%)',
+        borderRadius: '4px',
+        padding: '32px 36px',
+        maxWidth: '340px',
+        width: '90%',
+        boxShadow: '4px 8px 40px rgba(0,0,0,0.6)',
+        transform: 'rotate(-1deg)',
+        position: 'relative',
+        animation: 'fadeIn 0.25s ease',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', width: '60px', height: '18px', background: 'rgba(200,220,255,0.45)', borderRadius: '2px', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+        <h2 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '22px', fontWeight: 700, color: '#1a0e00', marginBottom: '16px' }}>Instructions</h2>
+        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '13px', color: '#2a1a00', lineHeight: 1.8 }}>
+          <p style={{ marginBottom: '10px' }}>
+            Have you ever wanted to say something to someone, but never got the chance? This is a collective voicemail box for the things we wish we said.
+          </p>
+          <p style={{ marginBottom: '10px' }}><strong>● RECORD</strong> — Press to capture a new voicemail. Press again to stop.</p>
+          <p style={{ marginBottom: '10px' }}><strong>▶ PLAY</strong> — Preview your recording, or play a random message from the archive.</p>
+          <p style={{ marginBottom: '10px' }}><strong>↑ SAVE</strong> — Upload your message to the archive.</p>
+          <p style={{ marginBottom: '10px' }}><strong>✕ CLEAR</strong> — Discard your current recording.</p>
+          <p style={{ marginBottom: '10px' }}><strong>BUY TICKETS</strong> — Purchase tickets to the live performance.</p>
+          <p style={{ color: '#4a3000', fontSize: '11px', marginTop: '14px' }}>* Your browser will ask for microphone permission when you first record.</p>
+        </div>
+        <button onClick={onClose} style={{
+          marginTop: '20px',
+          background: '#1a0e00',
+          color: '#f5e97a',
+          border: 'none',
+          borderRadius: '4px',
+          padding: '8px 20px',
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: '11px',
+          fontWeight: 600,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          cursor: 'pointer',
+        }}>Got it</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Ticket Button ──────────────────────────────────────────────────────────────
+function TicketButton() {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <div
+      role="button"
+      style={{
+        width: '100%',
+        background: pressed
+          ? 'linear-gradient(180deg, #c09000 0%, #d4a010 100%)'
+          : 'linear-gradient(180deg, #f5c828 0%, #e0aa10 60%, #c89000 100%)',
+        border: '1px solid #7a6000',
+        borderRadius: '10px',
+        cursor: 'pointer',
+        boxShadow: pressed
+          ? 'inset 0 3px 8px rgba(0,0,0,0.4), 0 2px 0 #5a4400'
+          : 'inset 0 1px 0 rgba(255,255,255,0.35), 0 5px 0 #7a6000, 0 7px 10px rgba(0,0,0,0.5)',
+        transform: pressed ? 'translateY(4px)' : 'translateY(0)',
+        transition: 'transform 0.06s, box-shadow 0.06s',
+        padding: '14px 16px',
+        userSelect: 'none',
+      }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => { setPressed(false); window.open('https://tickets.example.com', '_blank'); }}
+      onPointerLeave={() => setPressed(false)}
+    >
+      <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '24px', letterSpacing: '0.2em', color: '#1a0e00', lineHeight: '1.1', textAlign: 'center' }}>
+        BUY TICKETS
+      </div>
+      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '9px', fontWeight: 500, letterSpacing: '0.14em', color: '#3a2400', textTransform: 'uppercase', lineHeight: '1.2', textAlign: 'center', marginTop: '4px' }}>
+        For the Live Play Performance
+      </div>
+    </div>
+  );
+}
+
+// ── Share URL Banner ───────────────────────────────────────────────────────────
+function ShareBanner({ url, onDismiss }: { url: string; onDismiss: () => void }) {
+  return (
+    <div style={{
+      background: 'linear-gradient(160deg, #f5e97a 0%, #e8d555 100%)',
+      borderRadius: '6px',
+      padding: '10px 14px',
+      marginBottom: '10px',
+      fontFamily: "'DM Sans', sans-serif",
+      boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+      position: 'relative',
+    }}>
+      <button onClick={onDismiss} style={{ position: 'absolute', top: '6px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: '#4a3000', fontSize: '14px', fontWeight: 700 }}>×</button>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: '#2a1a00', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Message saved!</div>
+      <a href={url} style={{ fontSize: '10px', color: '#4a3000', wordBreak: 'break-all', textDecoration: 'underline' }}>{url}</a>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────────
 export function Home() {
-    const [time, setTime] = useState('');
-    const [isBlinking, setIsBlinking] = useState(true);
+  const { isRecording, audioUrl, audioBlob, error, startRecording, stopRecording, clearRecording } = useAudioRecorder();
 
-    const {
-        isRecording,
-        audioUrl,
-        audioBlob,
-        error,
-        startRecording,
-        stopRecording,
-        clearRecording
-    } = useAudioRecorder();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playTime, setPlayTime] = useState(0);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [messageCount, setMessageCount] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [transcription, setTranscription] = useState('');
+  const [recognition, setRecognition] = useState<any>(null);
 
-    const [isUploading, setIsUploading] = useState(false);
-    const [shareUrl, setShareUrl] = useState<string | null>(null);
-    const [transcription, setTranscription] = useState('');
-    const [recognition, setRecognition] = useState<any>(null);
-    const [showInstructions, setShowInstructions] = useState(false);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const handleUpload = async () => {
-        if (!audioBlob) return;
-        setIsUploading(true);
+  const showStatus = (msg: string, dur = 2500) => {
+    setStatusMsg(msg);
+    setTimeout(() => setStatusMsg(''), dur);
+  };
 
-        try {
-            // 1. Apply lo-fi filter
-            const processedBlob = await applyLoFiFilter(audioBlob);
+  // Fetch approved message count on mount
+  useEffect(() => {
+    supabase.from('messages').select('id', { count: 'exact', head: true }).eq('status', 'approved')
+      .then(({ count }) => { if (count !== null) setMessageCount(count); });
+  }, []);
 
-            // 2. Upload to Supabase Storage
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.wav`;
-            const { error: uploadError } = await supabase.storage
-                .from('voicemails')
-                .upload(fileName, processedBlob, { contentType: 'audio/wav' });
+  // Recording timer
+  useEffect(() => {
+    if (isRecording) {
+      setRecordingTime(0);
+      recordTimerRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
+    } else {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    }
+    return () => { if (recordTimerRef.current) clearInterval(recordTimerRef.current); };
+  }, [isRecording]);
 
-            if (uploadError) throw uploadError;
-
-            // 3. Get public URL
-            const { data: publicUrlData } = supabase.storage
-                .from('voicemails')
-                .getPublicUrl(fileName);
-
-            // 4. Insert into database
-            const messageId = crypto.randomUUID();
-            const { error: insertError } = await supabase
-                .from('messages')
-                .insert([{
-                    id: messageId,
-                    audio_url: publicUrlData.publicUrl,
-                    transcription: transcription || null,
-                    status: 'pending'
-                }]);
-
-            if (insertError) throw insertError;
-
-            setShareUrl(`${window.location.origin}/message/${messageId}`);
-
-            // Success: Reset for next recording
-            clearRecording();
-            setTranscription('');
-        } catch (err: any) {
-            console.error('Upload failed:', err);
-            alert('Upload failed: ' + err.message);
-        } finally {
-            setIsUploading(false);
-        }
+  // Speech recognition
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+    rec.onresult = (e: any) => {
+      let final = '';
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      }
+      if (final) setTranscription(p => p + ' ' + final);
     };
+    setRecognition(rec);
+  }, []);
 
-    const handlePlayRandom = async () => {
-        setIsUploading(true); // Re-using state just for loading feedback
-        try {
-            // Fetch all approved messages
-            const { data, error } = await supabase
-                .from('messages')
-                .select('id')
-                .eq('status', 'approved');
+  useEffect(() => {
+    if (!recognition) return;
+    if (isRecording) {
+      setTranscription('');
+      try { recognition.start(); } catch (_) {}
+    } else {
+      try { recognition.stop(); } catch (_) {}
+    }
+  }, [isRecording, recognition]);
 
-            if (error) throw error;
+  // Stop audio when recording starts or recording is cleared
+  useEffect(() => {
+    if (isRecording || !audioUrl) {
+      audioPlayerRef.current?.pause();
+      audioPlayerRef.current = null;
+      if (playTimerRef.current) clearInterval(playTimerRef.current);
+      setIsPlaying(false);
+      setPlayTime(0);
+    }
+  }, [isRecording, audioUrl]);
 
-            if (!data || data.length === 0) {
-                alert("No approved messages available yet!");
-                return;
-            }
+  const handleRecord = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+      playBeep();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
 
-            // Pick a random message
-            const randomMsg = data[Math.floor(Math.random() * data.length)];
-            window.location.href = `/message/${randomMsg.id}`;
-        } catch (err) {
-            console.error("Error fetching random message:", err);
-            alert("Failed to fetch a random message.");
-        } finally {
-            setIsUploading(false);
-        }
-    };
-
-    // Initialize Speech Recognition
-    useEffect(() => {
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            const rec = new SpeechRecognition();
-            rec.continuous = true;
-            rec.interimResults = true;
-            rec.lang = 'en-US';
-
-            rec.onresult = (event: any) => {
-                let finalTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    }
-                }
-                if (finalTranscript) {
-                    setTranscription(prev => prev + ' ' + finalTranscript);
-                }
-            };
-
-            rec.onerror = (event: any) => {
-                console.error('Speech recognition error:', event.error);
-            };
-
-            setRecognition(rec);
-        }
-    }, []);
-
-    // Start/Stop Speech Recognition when recording state changes
-    useEffect(() => {
-        if (isRecording && recognition) {
-            setTranscription('');
-            try {
-                recognition.start();
-            } catch (e) {
-                console.error("Recognition start error:", e);
-            }
-        } else if (!isRecording && recognition) {
-            try {
-                recognition.stop();
-            } catch (e) {
-                // Ignore if already stopped
-            }
-        }
-    }, [isRecording, recognition]);
-
-
-    // Handle Preview Audio Toggle
-    const handleTogglePreview = () => {
-        if (!audioUrl) return;
-
-        if (isPlaying) {
-            audioPlayerRef.current?.pause();
-            setIsPlaying(false);
-        } else {
-            if (!audioPlayerRef.current) {
-                audioPlayerRef.current = new Audio(audioUrl);
-                audioPlayerRef.current.crossOrigin = "anonymous";
-                audioPlayerRef.current.onended = () => {
-                    setIsPlaying(false);
-                    playBeep(); // Play beep when playback reaches the end
-                };
-            }
-            audioPlayerRef.current.play();
-            setIsPlaying(true);
-        }
-    };
-
-    // Stop audio if recording starts or recording is cleared
-    useEffect(() => {
-        if (isRecording || !audioUrl) {
-            if (audioPlayerRef.current) {
-                audioPlayerRef.current.pause();
-                audioPlayerRef.current = null;
-                setIsPlaying(false);
-            }
-        }
-    }, [isRecording, audioUrl]);
-
-    // Simple logic to keep the 90s digital clock updated
-    useEffect(() => {
-        const updateClock = () => {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            setTime(`${hours}:${minutes}`);
-            setIsBlinking(new Date().getSeconds() % 2 === 0);
+  const handlePlay = useCallback(async () => {
+    // If we have a local recording, preview it
+    if (audioUrl) {
+      if (isPlaying) {
+        audioPlayerRef.current?.pause();
+        if (playTimerRef.current) clearInterval(playTimerRef.current);
+        setIsPlaying(false);
+        setPlayTime(0);
+        return;
+      }
+      if (!audioPlayerRef.current) {
+        audioPlayerRef.current = new Audio(audioUrl);
+        audioPlayerRef.current.crossOrigin = 'anonymous';
+        audioPlayerRef.current.onended = () => {
+          if (playTimerRef.current) clearInterval(playTimerRef.current);
+          setIsPlaying(false);
+          setPlayTime(0);
+          playBeep();
         };
+      }
+      audioPlayerRef.current.play();
+      setIsPlaying(true);
+      setPlayTime(0);
+      playTimerRef.current = setInterval(() => setPlayTime(t => t + 1), 1000);
+      return;
+    }
 
-        const intervalId = setInterval(updateClock, 1000);
-        updateClock();
+    // No local recording — play a random approved message
+    setIsUploading(true);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('messages').select('id').eq('status', 'approved');
+      if (fetchError) throw fetchError;
+      if (!data || data.length === 0) { showStatus('NO MESSAGES YET'); return; }
+      const randomMsg = data[Math.floor(Math.random() * data.length)];
+      window.location.href = `/message/${randomMsg.id}`;
+    } catch {
+      showStatus('FETCH ERROR');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [audioUrl, isPlaying]);
 
-        return () => clearInterval(intervalId);
-    }, []);
+  const handleSave = useCallback(async () => {
+    if (!audioBlob) return;
+    setIsUploading(true);
+    try {
+      const processed = await applyLoFiFilter(audioBlob);
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.wav`;
+      const { error: uploadError } = await supabase.storage
+        .from('voicemails').upload(fileName, processed, { contentType: 'audio/wav' });
+      if (uploadError) throw uploadError;
 
-    return (
-        <>
-            <div className="grain answering-machine__grain"></div>
+      const { data: urlData } = supabase.storage.from('voicemails').getPublicUrl(fileName);
+      const messageId = crypto.randomUUID();
+      const { error: insertError } = await supabase.from('messages').insert([{
+        id: messageId,
+        audio_url: urlData.publicUrl,
+        transcription: transcription || null,
+        status: 'pending',
+      }]);
+      if (insertError) throw insertError;
 
+      setShareUrl(`${window.location.origin}/message/${messageId}`);
+      clearRecording();
+      setTranscription('');
+      showStatus('SAVED!');
+    } catch (err: any) {
+      showStatus('SAVE FAILED');
+      console.error(err);
+    } finally {
+      setIsUploading(false);
+    }
+  }, [audioBlob, transcription, clearRecording]);
 
-            {/* Instructions Modal */}
-            {showInstructions && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 answering-machine__modal">
-                    <div className="bg-[#ffffbf] p-8 max-w-md w-full shadow-2xl rotate-1 border-l-8 border-[#e6e600] relative answering-machine__modal-content">
-                        <button
-                            onClick={() => setShowInstructions(false)}
-                            className="absolute top-2 right-4 text-2xl font-bold text-[#1a1a1a] hover:scale-110 transition-transform answering-machine__modal-close"
-                        >
-                            ×
-                        </button>
-                        <h2 className="text-2xl font-bold mb-4 font-handwriting text-[#1a1a1a]">Read Me!</h2>
-                        <p className="font-handwriting leading-relaxed text-[#1a1a1a] text-lg">
-                            Have you ever wanted to say something to someone, but never got the chance?
-                            This is a collective voicemail box for the things we wish we said.
-                            Leave a message for yourself from when you were a kid, or for the one that got away,
-                            or a person you lost on the way. You can listen to messages others have left here.
-                            Maybe you can pass them along to where they need to go...
-                        </p>
-                    </div>
-                </div>
-            )}
+  const handleClear = useCallback(() => {
+    clearRecording();
+    setTranscription('');
+    setShareUrl(null);
+    showStatus('CLEARED');
+  }, [clearRecording]);
 
-            {/* BEGIN: PhoneContainer */}
-            <main className="plastic-body answering-machine__shell w-[90%] max-w-[400px] p-8 flex flex-col items-center gap-6 border-2 border-[#b3a79a] relative" data-purpose="answering-machine-shell">
+  // Cleanup on unmount
+  useEffect(() => () => {
+    if (playTimerRef.current) clearInterval(playTimerRef.current);
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    audioPlayerRef.current?.pause();
+  }, []);
 
-                {/* Post-it Note - Positioned relative to the shell */}
-                <button
-                    onClick={() => setShowInstructions(true)}
-                    className="answering-machine__post-it absolute -top-4 -right-8 rotate-12 bg-[#ffffbf] p-3 shadow-md border-l-2 border-[#e6e600] cursor-pointer hover:scale-105 transition-transform font-handwriting text-[#1a1a1a] z-40"
-                >
-                    <div className="text-lg font-bold tracking-tight">Read Me!</div>
-                    <div className="text-[10px] uppercase opacity-50">instructions</div>
-                </button>
+  const hasRecording = !!audioUrl;
 
-                {/* BEGIN: TopSection - Display and Speaker */}
-                <section className="w-full flex justify-between items-start mb-4 answering-machine__header" data-purpose="device-header">
-                    {/* Digital Display Block */}
-                    <div className="bg-black p-3 rounded-lg border-4 border-[#8e857b] shadow-inner answering-machine__display" data-purpose="status-display">
-                        <div className="digital-font text-red-600 text-5xl leading-none tracking-widest answering-machine__clock" id="clock-display">
-                            {time.slice(0, 2)}
-                            <span className={isBlinking ? 'opacity-100' : 'opacity-0'}>:</span>
-                            {time.slice(3)}
-                        </div>
-                        <div className="text-[10px] text-red-900 font-bold uppercase mt-1 answering-machine__message-count">Messages: 03</div>
-                    </div>
+  return (
+    <>
+      <div className="grain" />
+      {showInstructions && <InstructionsModal onClose={() => setShowInstructions(false)} />}
 
-                    {/* Speaker Grill */}
-                    <div className="grid grid-cols-4 gap-2 p-2 bg-[#c0b5a8] rounded-full border border-[#a1978b] answering-machine__speaker" data-purpose="voicemail-speaker">
-                        {Array.from({ length: 16 }).map((_, i) => (
-                            <div key={i} className="speaker-hole answering-machine__speaker-hole"></div>
-                        ))}
-                    </div>
-                </section>
-                {/* END: TopSection */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        padding: '40px 20px',
+      }}>
+        <div style={{
+          position: 'relative',
+          width: '300px',
+          background: 'linear-gradient(160deg, #2e2e2e 0%, #1c1c1c 40%, #141414 70%, #1e1e1e 100%)',
+          borderRadius: '36px',
+          padding: '30px 28px 32px',
+          boxShadow: `
+            0 60px 100px rgba(0,0,0,0.9),
+            0 30px 50px rgba(0,0,0,0.65),
+            0 10px 20px rgba(0,0,0,0.4),
+            inset 0 1px 0 rgba(255,255,255,0.1),
+            inset 0 -2px 0 rgba(0,0,0,0.6),
+            inset 2px 0 0 rgba(255,255,255,0.05),
+            inset -2px 0 0 rgba(0,0,0,0.4)
+          `,
+          animation: 'fadeIn 0.5s ease',
+        }}>
+          {/* Left edge highlight */}
+          <div style={{
+            position: 'absolute', top: '20px', bottom: '20px', left: '1px', width: '3px',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 50%, transparent 100%)',
+            borderRadius: '2px',
+          }} />
 
-                {/* BEGIN: BrandLogo */}
-                <div className="w-full text-left px-2 answering-machine__brand">
-                    <span className="font-serif italic font-black text-[#8e857b] text-xl opacity-60 answering-machine__brand-text">MEMO-TONE 3000</span>
-                </div>
-                {/* END: BrandLogo */}
+          <StickyNote onClick={() => setShowInstructions(true)} />
 
-                {/* BEGIN: ButtonGrid */}
-                <section className="grid grid-cols-2 gap-6 w-full mt-4 answering-machine__controls" data-purpose="control-panel">
-                    {error && <div className="col-span-2 text-red-600 text-xs text-center answering-machine__error">{error}</div>}
+          {/* Brand strip */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div>
+              <div style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: '22px',
+                letterSpacing: '0.12em',
+                color: 'transparent',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                backgroundImage: 'linear-gradient(180deg, #c8c8c8 0%, #888 100%)',
+                lineHeight: 1,
+              }}>LIFELINE</div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '8px', color: '#555', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '1px' }}>
+                Voice Message System
+              </div>
+            </div>
+            <SpeakerGrille />
+          </div>
 
-                    {/* Record / Stop Button */}
-                    <button
-                        onClick={isRecording ? () => { stopRecording(); playBeep(); } : startRecording}
-                        disabled={!!audioUrl && !isRecording}
-                        className={`tactile-button answering-machine__button answering-machine__button--record text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black ${isRecording ? 'bg-red-800' : (audioUrl ? 'bg-gray-400 opacity-50' : 'bg-[#444]')}`}
-                        data-purpose="record-action"
-                    >
-                        {isRecording ? (
-                            <>
-                                <Square className="w-5 h-5 text-red-500 animate-pulse answering-machine__button-icon answering-machine__button-icon--stop" />
-                                <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Stop</span>
-                            </>
-                        ) : (
-                            <>
-                                <div className="w-4 h-4 bg-red-600 rounded-full shadow-[0_0_5px_red] answering-machine__button-icon answering-machine__button-icon--record"></div>
-                                <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Record</span>
-                            </>
-                        )}
-                    </button>
+          {/* LCD bezel */}
+          <div style={{
+            background: '#0a0a0a',
+            borderRadius: '10px',
+            padding: '6px',
+            boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.9), inset 0 1px 3px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.05)',
+            marginBottom: '4px',
+          }}>
+            <LCDDisplay
+              messageCount={messageCount}
+              recordingTime={recordingTime}
+              isRecording={isRecording}
+              isPlaying={isPlaying}
+              playTime={playTime}
+              hasRecording={hasRecording}
+              statusMsg={statusMsg}
+            />
+          </div>
 
-                    {/* Preview or Play Random */}
-                    {audioUrl ? (
-                        <button
-                            onClick={handleTogglePreview}
-                            className="tactile-button answering-machine__button answering-machine__button--preview bg-blue-600 text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black"
-                        >
-                            {isPlaying ? (
-                                <>
-                                    <Pause className="w-6 h-6 answering-machine__button-icon" />
-                                    <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Pause</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Play className="w-6 h-6 answering-machine__button-icon" />
-                                    <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Preview</span>
-                                </>
-                            )}
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handlePlayRandom}
-                            disabled={isUploading || isRecording}
-                            className={`tactile-button answering-machine__button answering-machine__button--random text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black ${isRecording ? 'bg-gray-400 opacity-50' : 'bg-[#6b7280]'}`}
-                            data-purpose="play-random-action"
-                        >
-                            <Play className="w-6 h-6 answering-machine__button-icon" />
-                            <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">
-                                {isUploading ? 'Loading...' : 'Play Random'}
-                            </span>
-                        </button>
-                    )}
+          {/* Error display */}
+          {error && (
+            <div style={{ textAlign: 'center', fontFamily: "'DM Sans', sans-serif", fontSize: '9px', color: '#ff4040', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '6px 0 0' }}>
+              {error}
+            </div>
+          )}
 
-                    {/* Clear Button - Persistent */}
-                    <button
-                        onClick={clearRecording}
-                        disabled={!audioUrl || isRecording}
-                        className={`tactile-button answering-machine__button answering-machine__button--clear text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black ${(!audioUrl || isRecording) ? 'bg-gray-400 opacity-50' : 'bg-[#cc3333]'}`}
-                    >
-                        <RotateCcw className="w-6 h-6 answering-machine__button-icon" />
-                        <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">Clear</span>
-                    </button>
+          {/* Divider */}
+          <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #333, transparent)', margin: '14px 0 16px' }} />
 
-                    {/* Save Button (formerly Share) - Persistent */}
-                    <button
-                        onClick={audioUrl ? handleUpload : undefined}
-                        disabled={!audioUrl || isUploading || isRecording}
-                        className={`tactile-button answering-machine__button answering-machine__button--save text-white py-4 rounded-xl flex flex-col items-center justify-center gap-1 border-b-4 border-black 
-                            ${isUploading ? 'bg-gray-600 opacity-50' : (audioUrl && !isRecording ? 'bg-[#338833]' : 'bg-gray-400 opacity-50')}`}
-                        data-purpose="share-action"
-                    >
-                        <UploadCloud className={`w-6 h-6 answering-machine__button-icon ${isUploading ? 'animate-bounce' : ''}`} />
-                        <span className="text-xs font-bold uppercase tracking-tighter answering-machine__button-label">
-                            {isUploading ? 'Saving...' : 'Save'}
-                        </span>
-                    </button>
+          {/* Share URL */}
+          {shareUrl && <ShareBanner url={shareUrl} onDismiss={() => setShareUrl(null)} />}
 
-                    {/* Share URL Display */}
-                    {shareUrl && (
-                        <div className="col-span-2 text-center text-xs mt-2 p-2 bg-yellow-100 text-yellow-900 border-2 border-yellow-400 rounded answering-machine__share-url">
-                            <p className="answering-machine__share-text">Success! Share this link:</p>
-                            <a href={shareUrl} className="font-bold underline break-all answering-machine__link">{shareUrl}</a>
-                        </div>
-                    )}
+          {/* Main buttons */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+            <HardwareButton
+              label={isRecording ? 'Stop' : 'Record'}
+              icon={isRecording ? '■' : '●'}
+              color="record"
+              onClick={handleRecord}
+              disabled={isUploading}
+            />
+            <HardwareButton
+              label={isPlaying ? 'Stop' : (hasRecording ? 'Preview' : 'Play')}
+              icon={isPlaying ? '■' : '▶'}
+              color="play"
+              onClick={handlePlay}
+              disabled={isRecording || isUploading}
+            />
+          </div>
 
-                </section>
-                {/* END: ButtonGrid */}
+          {/* Secondary buttons — visible when a recording exists */}
+          {hasRecording && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+              <HardwareButton
+                label={isUploading ? 'Saving…' : 'Save'}
+                icon="↑"
+                color="save"
+                onClick={handleSave}
+                disabled={isUploading || isRecording}
+              />
+              <HardwareButton
+                label="Clear"
+                icon="✕"
+                color="default"
+                onClick={handleClear}
+                disabled={isUploading || isRecording}
+              />
+            </div>
+          )}
 
-                {/* BEGIN: FeaturedAction */}
-                <section className="w-full mt-8 answering-machine__cta" data-purpose="primary-call-to-action">
-                    <button className="tactile-button w-full bg-[#ffcc00] hover:bg-[#ffdb4d] text-[#1a1a1a] py-6 rounded-2xl flex flex-col items-center justify-center border-b-8 border-[#b38f00] group answering-machine__cta-button" data-purpose="buy-tickets-button">
-                        <span className="text-2xl font-black uppercase italic tracking-widest group-active:scale-95 transition-transform answering-machine__cta-primary">Buy Tickets</span>
-                        <span className="text-[10px] font-bold mt-1 text-[#665200] answering-machine__cta-secondary">FOR THE LIVE PLAY PERFORMANCE</span>
-                    </button>
-                </section>
-                {/* END: FeaturedAction */}
+          {/* Bottom divider */}
+          <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #2a2a2a, transparent)', margin: '4px 0 14px' }} />
 
-                {/* BEGIN: DecorativeDetail */}
-                <div className="mt-4 w-full h-1 bg-[#b3a79a] rounded shadow-inner answering-machine__decorative-groove" data-purpose="decorative-groove"></div>
-                <div className="mt-1 w-full flex justify-center answering-machine__decorative-foot-container">
-                    <div className="w-1/3 h-8 bg-[#c0b5a8] rounded-b-3xl border-x-2 border-b-2 border-[#b3a79a] answering-machine__decorative-foot"></div>
-                </div>
-                {/* END: DecorativeDetail */}
-            </main>
-        </>
-    );
+          <TicketButton />
+
+          {/* Bottom nub */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+            <div style={{
+              width: '40px', height: '8px', borderRadius: '4px',
+              background: 'linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)',
+              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04)',
+            }} />
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }
