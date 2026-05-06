@@ -156,9 +156,9 @@ interface HardwareButtonProps {
 
 const buttonColors: Record<ButtonColor, { bg: string; top: string; border: string; text: string; glow: string }> = {
   default: { bg: '#2a2a2a', top: '#3a3a3a', border: '#1a1a1a', text: '#c8c8c8', glow: 'none' },
-  record:  { bg: '#1a0a0a', top: '#3a1010', border: '#0a0505', text: '#ff6060', glow: '0 0 12px rgba(255,60,60,0.3)' },
-  play:    { bg: '#0a1410', top: '#102a18', border: '#050a08', text: '#00ff64', glow: '0 0 12px rgba(0,255,100,0.2)' },
-  save:    { bg: '#0a0e1a', top: '#101830', border: '#050810', text: '#6080ff', glow: '0 0 12px rgba(80,120,255,0.2)' },
+  record: { bg: '#1a0a0a', top: '#3a1010', border: '#0a0505', text: '#ff6060', glow: '0 0 12px rgba(255,60,60,0.3)' },
+  play: { bg: '#0a1410', top: '#102a18', border: '#050a08', text: '#00ff64', glow: '0 0 12px rgba(0,255,100,0.2)' },
+  save: { bg: '#0a0e1a', top: '#101830', border: '#050810', text: '#6080ff', glow: '0 0 12px rgba(80,120,255,0.2)' },
 };
 
 function HardwareButton({ label, icon, onClick, color = 'default', disabled = false }: HardwareButtonProps) {
@@ -331,14 +331,14 @@ function TicketButton() {
         userSelect: 'none',
       }}
       onPointerDown={() => setPressed(true)}
-      onPointerUp={() => { setPressed(false); window.open('https://tickets.example.com', '_blank'); }}
+      onPointerUp={() => { setPressed(false); window.open('https://www.fluxtheatre.org/productions/fear-wonder', '_blank'); }}
       onPointerLeave={() => setPressed(false)}
     >
       <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '24px', letterSpacing: '0.2em', color: '#1a0e00', lineHeight: '1.1', textAlign: 'center' }}>
-        BUY TICKETS
+        GET TICKETS
       </div>
       <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '9px', fontWeight: 500, letterSpacing: '0.14em', color: '#3a2400', textTransform: 'uppercase', lineHeight: '1.2', textAlign: 'center', marginTop: '4px' }}>
-        For the Live Play Performance
+        For Fear & Wonder
       </div>
     </div>
   );
@@ -426,9 +426,9 @@ export function Home() {
     if (!recognition) return;
     if (isRecording) {
       setTranscription('');
-      try { recognition.start(); } catch (_) {}
+      try { recognition.start(); } catch (_) { }
     } else {
-      try { recognition.stop(); } catch (_) {}
+      try { recognition.stop(); } catch (_) { }
     }
   }, [isRecording, recognition]);
 
