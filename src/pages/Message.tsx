@@ -122,7 +122,18 @@ export function Message() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioPlayer, setAudioPlayer] = useState<HTMLAudioElement | null>(null);
   const [isFetchingNext, setIsFetchingNext] = useState(false);
+  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
+
+  const handleShare = () => {
+    const text = `Listen to this message I found on Lifeline! ${window.location.href}`;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+    });
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -272,6 +283,16 @@ export function Message() {
               disabled={isFetchingNext}
               wide
             />
+
+            {!error && (
+              <HardwareButton
+                label={copied ? 'Copied!' : 'Share Message'}
+                icon="🔗"
+                color="default"
+                onClick={handleShare}
+                disabled={loading || !audioUrl}
+              />
+            )}
 
             <Link to="/" style={{ textDecoration: 'none' }}>
               <HardwareButton
