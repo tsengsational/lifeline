@@ -486,7 +486,19 @@ export function Home() {
         .from('messages').select('id').eq('status', 'approved');
       if (fetchError) throw fetchError;
       if (!data || data.length === 0) { showStatus('NO MESSAGES YET'); return; }
-      const randomMsg = data[Math.floor(Math.random() * data.length)];
+      let history = JSON.parse(sessionStorage.getItem('played_messages') || '[]');
+      let unplayed = data.filter(m => !history.includes(m.id));
+
+      if (unplayed.length === 0) {
+        history = [];
+        unplayed = data;
+      }
+
+      const randomMsg = unplayed[Math.floor(Math.random() * unplayed.length)];
+      
+      history.push(randomMsg.id);
+      sessionStorage.setItem('played_messages', JSON.stringify(history));
+
       window.location.href = `/message/${randomMsg.id}`;
     } catch {
       showStatus('FETCH ERROR');

@@ -187,11 +187,29 @@ export function Message() {
     try {
       const { data, error } = await supabase.from('messages').select('id').eq('status', 'approved');
       if (error) throw error;
-      const others = (data || []).filter(m => m.id !== id);
-      if (others.length === 0) return;
+      
+      let history = JSON.parse(sessionStorage.getItem('played_messages') || '[]');
+      if (!history.includes(id)) {
+        history.push(id);
+      }
+
+      let unplayed = (data || []).filter(m => !history.includes(m.id));
+
+      if (unplayed.length === 0) {
+        history = [id];
+        unplayed = (data || []).filter(m => m.id !== id);
+      }
+      
+      if (unplayed.length === 0) return;
+
+      const nextMsg = unplayed[Math.floor(Math.random() * unplayed.length)];
+
+      history.push(nextMsg.id);
+      sessionStorage.setItem('played_messages', JSON.stringify(history));
+
       audioPlayer?.pause();
       setIsPlaying(false);
-      navigate(`/message/${others[Math.floor(Math.random() * others.length)].id}`);
+      navigate(`/message/${nextMsg.id}`);
     } catch (err) {
       console.error('Error fetching next message:', err);
     } finally {
