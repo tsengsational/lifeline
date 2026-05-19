@@ -495,7 +495,7 @@ export function Home() {
       }
 
       const randomMsg = unplayed[Math.floor(Math.random() * unplayed.length)];
-      
+
       history.push(randomMsg.id);
       sessionStorage.setItem('played_messages', JSON.stringify(history));
 
@@ -598,16 +598,16 @@ export function Home() {
             <div>
               <div style={{
                 fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: '22px',
+                fontSize: '26px',
                 letterSpacing: '0.12em',
                 color: 'transparent',
                 backgroundClip: 'text',
                 WebkitBackgroundClip: 'text',
                 backgroundImage: 'linear-gradient(180deg, #c8c8c8 0%, #888 100%)',
                 lineHeight: 1,
-              }}>LIFELINE</div>
-              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '8px', color: '#555', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '1px' }}>
-                Voice Message System
+              }}>CALLBACK</div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1rem', color: '#555', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '1px' }}>
+                Leave a Mess at the Beep
               </div>
             </div>
             <SpeakerGrille />

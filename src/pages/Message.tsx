@@ -55,7 +55,7 @@ function LCDStatus({ status }: { status: 'loading' | 'ready' | 'playing' | 'erro
         </span>
       </div>
       <div style={{ color: '#00aa44', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', textShadow: '0 0 6px rgba(0,200,80,0.5)', position: 'relative', zIndex: 12, marginTop: '4px' }}>
-        {status === 'loading' ? 'RETRIEVING...' : status === 'error' ? 'NOT FOUND' : 'LIFELINE ARCHIVE'}
+        {status === 'loading' ? 'RETRIEVING...' : status === 'error' ? 'NOT FOUND' : 'CALLBACK ARCHIVE'}
       </div>
     </div>
   );
@@ -126,7 +126,7 @@ export function Message() {
   const navigate = useNavigate();
 
   const handleShare = () => {
-    const text = `Listen to this message I found on Lifeline! ${window.location.href}`;
+    const text = `Listen to this message I found on Callback! ${window.location.href}`;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -254,9 +254,9 @@ export function Message() {
                 fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.12em',
                 color: 'transparent', backgroundClip: 'text', WebkitBackgroundClip: 'text',
                 backgroundImage: 'linear-gradient(180deg, #c8c8c8 0%, #888 100%)', lineHeight: 1,
-              }}>LIFELINE</div>
+              }}>CALLBACK</div>
               <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '8px', color: '#555', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '1px' }}>
-                Voice Message System
+                Leave a Mess at the Beep
               </div>
             </div>
             <SpeakerGrille />
