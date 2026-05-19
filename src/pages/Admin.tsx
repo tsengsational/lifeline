@@ -156,7 +156,7 @@ export function Admin() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
             <div style={{ ...{ fontFamily: "'Bebas Neue', sans-serif" }, fontSize: '28px', letterSpacing: '0.15em', color: 'transparent', backgroundClip: 'text', WebkitBackgroundClip: 'text', backgroundImage: 'linear-gradient(180deg, #c8c8c8 0%, #888 100%)' }}>
-              LIFELINE TERMINAL
+              CALLBACK TERMINAL
             </div>
             <div style={{ ...sans, fontSize: '9px', color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '2px' }}>Admin Message Management</div>
           </div>
