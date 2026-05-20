@@ -119,26 +119,24 @@ function LCDDisplay({ messageCount, recordingTime, isRecording, isPlaying, playT
         )}
       </div>
 
-      {/* Waveform when recording */}
-      {isRecording && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '6px', height: '16px', position: 'relative', zIndex: 12 }}>
-          {Array.from({ length: 20 }).map((_, i) => (
-            <div key={i} style={{
-              width: '3px',
-              background: '#00ff64',
-              borderRadius: '1px',
-              boxShadow: '0 0 4px rgba(0,255,100,0.6)',
-              animationName: 'waveform',
-              animationDuration: `${0.3 + (i * 0.037 % 0.5)}s`,
-              animationTimingFunction: 'ease-in-out',
-              animationIterationCount: 'infinite',
-              animationDelay: `${i * 0.04}s`,
-              height: '100%',
-              transformOrigin: 'bottom',
-            }} />
-          ))}
-        </div>
-      )}
+      {/* Waveform when recording or playing */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '6px', height: '16px', position: 'relative', zIndex: 12, visibility: (isRecording || isPlaying) ? 'visible' : 'hidden' }}>
+        {Array.from({ length: 20 }).map((_, i) => (
+          <div key={i} style={{
+            width: '3px',
+            background: '#00ff64',
+            borderRadius: '1px',
+            boxShadow: '0 0 4px rgba(0,255,100,0.6)',
+            animationName: 'waveform',
+            animationDuration: `${0.3 + (i * 0.037 % 0.5)}s`,
+            animationTimingFunction: 'ease-in-out',
+            animationIterationCount: 'infinite',
+            animationDelay: `${i * 0.04}s`,
+            height: '100%',
+            transformOrigin: 'bottom',
+          }} />
+        ))}
+      </div>
     </div>
   );
 }

@@ -57,6 +57,25 @@ function LCDStatus({ status }: { status: 'loading' | 'ready' | 'playing' | 'erro
       <div style={{ color: '#00aa44', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', textShadow: '0 0 6px rgba(0,200,80,0.5)', position: 'relative', zIndex: 12, marginTop: '4px' }}>
         {status === 'loading' ? 'RETRIEVING...' : status === 'error' ? 'NOT FOUND' : 'CALLBACK ARCHIVE'}
       </div>
+
+      {/* Waveform when playing */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '6px', height: '16px', position: 'relative', zIndex: 12, visibility: status === 'playing' ? 'visible' : 'hidden' }}>
+        {Array.from({ length: 20 }).map((_, i) => (
+          <div key={i} style={{
+            width: '3px',
+            background: '#00ff64',
+            borderRadius: '1px',
+            boxShadow: '0 0 4px rgba(0,255,100,0.6)',
+            animationName: 'waveform',
+            animationDuration: `${0.3 + (i * 0.037 % 0.5)}s`,
+            animationTimingFunction: 'ease-in-out',
+            animationIterationCount: 'infinite',
+            animationDelay: `${i * 0.04}s`,
+            height: '100%',
+            transformOrigin: 'bottom',
+          }} />
+        ))}
+      </div>
     </div>
   );
 }
