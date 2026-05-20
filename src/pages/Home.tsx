@@ -357,8 +357,11 @@ function ShareBanner({ url, onDismiss }: { url: string; onDismiss: () => void })
       position: 'relative',
     }}>
       <button onClick={onDismiss} style={{ position: 'absolute', top: '6px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: '#4a3000', fontSize: '14px', fontWeight: 700 }}>×</button>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#2a1a00', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Message saved!</div>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: '#2a1a00', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Message submitted!</div>
       <a href={url} style={{ fontSize: '10px', color: '#4a3000', wordBreak: 'break-all', textDecoration: 'underline' }}>{url}</a>
+      <div style={{ fontSize: '10px', color: '#4a3000', marginTop: '6px', lineHeight: 1.4 }}>
+        Your recording has been submitted and will be added to the app pending review.
+      </div>
     </div>
   );
 }
