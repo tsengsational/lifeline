@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Check, X, RefreshCw, LogIn, Loader2, Download } from 'lucide-react';
+import { Check, X, RefreshCw, LogIn, Loader2, Download, Upload } from 'lucide-react';
 
 const mono: React.CSSProperties = { fontFamily: "'Share Tech Mono', monospace" };
 const sans: React.CSSProperties = { fontFamily: "'DM Sans', sans-serif" };
@@ -14,6 +14,14 @@ export function Admin() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [downloadingIds, setDownloadingIds] = useState<Record<string, boolean>>({});
+
+  // File upload state variables
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTranscription, setUploadTranscription] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<'pending' | 'approved'>('approved');
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [uploadErrorMsg, setUploadErrorMsg] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -92,6 +100,48 @@ export function Admin() {
       window.open(audioUrl, '_blank');
     } finally {
       setDownloadingIds(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile) {
+      setUploadErrorMsg('Please select an audio file.');
+      return;
+    }
+    setIsUploadingFile(true);
+    setUploadErrorMsg('');
+    try {
+      const fileExt = uploadFile.name.split('.').pop() || 'wav';
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('voicemails')
+        .upload(fileName, uploadFile, { contentType: uploadFile.type });
+      
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('voicemails').getPublicUrl(fileName);
+      const messageId = crypto.randomUUID();
+      const { error: insertError } = await supabase.from('messages').insert([{
+        id: messageId,
+        audio_url: urlData.publicUrl,
+        transcription: uploadTranscription || null,
+        status: uploadStatus,
+      }]);
+
+      if (insertError) throw insertError;
+
+      // Reset & close
+      setUploadFile(null);
+      setUploadTranscription('');
+      setUploadStatus('approved');
+      setShowUploadModal(false);
+      fetchMessages();
+    } catch (err: any) {
+      console.error(err);
+      setUploadErrorMsg(err.message || 'Failed to upload file.');
+    } finally {
+      setIsUploadingFile(false);
     }
   };
 
@@ -184,19 +234,34 @@ export function Admin() {
             </div>
             <div style={{ ...sans, fontSize: '9px', color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '2px' }}>Admin Message Management</div>
           </div>
-          <button
-            onClick={fetchMessages}
-            style={{
-              ...sans, display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'linear-gradient(180deg, #102a18 0%, #0a1410 100%)',
-              border: '1px solid #050a08', borderRadius: '8px',
-              padding: '8px 14px', color: '#00ff64', fontSize: '10px', fontWeight: 500,
-              letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
-              boxShadow: '0 3px 0 #050a08, 0 4px 6px rgba(0,0,0,0.5)',
-            }}
-          >
-            <RefreshCw style={{ width: 12, height: 12 }} /> REFRESH
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              style={{
+                ...sans, display: 'flex', alignItems: 'center', gap: '6px',
+                background: 'linear-gradient(180deg, #10202a 0%, #0a1014 100%)',
+                border: '1px solid #05080a', borderRadius: '8px',
+                padding: '8px 14px', color: '#00a4ff', fontSize: '10px', fontWeight: 500,
+                letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
+                boxShadow: '0 3px 0 #05080a, 0 4px 6px rgba(0,0,0,0.5)',
+              }}
+            >
+              <Upload style={{ width: 12, height: 12 }} /> UPLOAD AUDIO
+            </button>
+            <button
+              onClick={fetchMessages}
+              style={{
+                ...sans, display: 'flex', alignItems: 'center', gap: '6px',
+                background: 'linear-gradient(180deg, #102a18 0%, #0a1410 100%)',
+                border: '1px solid #050a08', borderRadius: '8px',
+                padding: '8px 14px', color: '#00ff64', fontSize: '10px', fontWeight: 500,
+                letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
+                boxShadow: '0 3px 0 #050a08, 0 4px 6px rgba(0,0,0,0.5)',
+              }}
+            >
+              <RefreshCw style={{ width: 12, height: 12 }} /> REFRESH
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -366,6 +431,130 @@ export function Admin() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(6px)',
+        }}>
+          <form onSubmit={handleUploadSubmit} style={{
+            background: 'linear-gradient(160deg, #181818 0%, #101010 100%)',
+            border: '1px solid #2a2a2a',
+            borderRadius: '16px',
+            padding: '32px',
+            width: '100%',
+            maxWidth: '440px',
+            boxShadow: '0 40px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Upload style={{ color: '#00a4ff', width: 20, height: 20 }} />
+                <span style={{ ...mono, color: '#00a4ff', fontSize: '16px', letterSpacing: '0.15em' }}>RESTORE VOICEMAIL</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadFile(null);
+                  setUploadTranscription('');
+                  setUploadStatus('approved');
+                  setUploadErrorMsg('');
+                }}
+                style={{
+                  background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '18px', padding: '4px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {uploadErrorMsg && (
+              <div style={{ ...sans, background: 'rgba(255,64,64,0.1)', border: '1px solid rgba(255,64,64,0.3)', borderRadius: '6px', padding: '10px 12px', color: '#ff6060', fontSize: '12px' }}>
+                {uploadErrorMsg}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ ...mono, fontSize: '11px', color: '#888', letterSpacing: '0.05em' }}>AUDIO FILE</label>
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={e => {
+                  if (e.target.files && e.target.files[0]) {
+                    setUploadFile(e.target.files[0]);
+                  }
+                }}
+                style={{
+                  ...mono, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px',
+                  padding: '10px 12px', color: '#00a4ff', fontSize: '12px',
+                  outline: 'none', cursor: 'pointer'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ ...mono, fontSize: '11px', color: '#888', letterSpacing: '0.05em' }}>TRANSCRIPTION (OPTIONAL)</label>
+              <textarea
+                placeholder="Enter transcription text..."
+                rows={3}
+                value={uploadTranscription}
+                onChange={e => setUploadTranscription(e.target.value)}
+                style={{
+                  ...mono, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px',
+                  padding: '10px 12px', color: '#00ff64', fontSize: '12px',
+                  outline: 'none', resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ ...mono, fontSize: '11px', color: '#888', letterSpacing: '0.05em' }}>STATUS</label>
+              <select
+                value={uploadStatus}
+                onChange={e => setUploadStatus(e.target.value as 'pending' | 'approved')}
+                style={{
+                  ...mono, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px',
+                  padding: '10px 12px', color: '#00ff64', fontSize: '12px',
+                  outline: 'none'
+                }}
+              >
+                <option value="approved">APPROVED (ACTIVE)</option>
+                <option value="pending">PENDING APPROVAL</option>
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isUploadingFile}
+              style={{
+                ...mono, background: 'linear-gradient(180deg, #10202a 0%, #0a1014 100%)',
+                border: '1px solid #05080a', borderRadius: '8px',
+                padding: '14px', color: '#00a4ff', fontSize: '13px', letterSpacing: '0.2em',
+                cursor: isUploadingFile ? 'default' : 'pointer', marginTop: '8px',
+                boxShadow: '0 4px 0 #05080a, 0 5px 8px rgba(0,0,0,0.6)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                opacity: isUploadingFile ? 0.7 : 1
+              }}
+            >
+              {isUploadingFile ? (
+                <>
+                  <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> UPLOADING...
+                </>
+              ) : (
+                <>
+                  <Upload style={{ width: 14, height: 14 }} /> UPLOAD & SAVE
+                </>
+              )}
+            </button>
+          </form>
         </div>
       )}
     </div>
