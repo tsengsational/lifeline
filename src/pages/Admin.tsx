@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Check, X, RefreshCw, LogIn, Loader2 } from 'lucide-react';
+import { Check, X, RefreshCw, LogIn, Loader2, Download } from 'lucide-react';
 
 const mono: React.CSSProperties = { fontFamily: "'Share Tech Mono', monospace" };
 const sans: React.CSSProperties = { fontFamily: "'DM Sans', sans-serif" };
@@ -13,6 +13,7 @@ export function Admin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [downloadingIds, setDownloadingIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -68,6 +69,29 @@ export function Admin() {
       if (!error) fetchMessages();
     } catch (err) {
       console.error('Error deleting:', err);
+    }
+  };
+
+  const handleDownload = async (id: string, audioUrl: string, createdAt: string) => {
+    setDownloadingIds(prev => ({ ...prev, [id]: true }));
+    try {
+      const response = await fetch(audioUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const extension = audioUrl.split('?')[0].split('.').pop() || 'wav';
+      const dateStr = new Date(createdAt).toISOString().split('T')[0];
+      a.download = `voicemail_${dateStr}_${id.slice(0, 6)}.${extension}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading:', err);
+      window.open(audioUrl, '_blank');
+    } finally {
+      setDownloadingIds(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -235,7 +259,30 @@ export function Admin() {
                 )}
               </div>
 
-              <audio controls src={msg.audio_url} style={{ width: '100%', filter: 'invert(1) hue-rotate(180deg) contrast(0.8)' }} />
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
+                <audio controls src={msg.audio_url} style={{ flex: 1, filter: 'invert(1) hue-rotate(180deg) contrast(0.8)' }} />
+                <button
+                  onClick={() => handleDownload(msg.id, msg.audio_url, msg.created_at)}
+                  disabled={downloadingIds[msg.id]}
+                  title="Download Audio"
+                  className="hover:bg-[rgba(0,255,100,0.12)] active:scale-95 transition-all duration-200"
+                  style={{
+                    ...sans, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(0,255,100,0.06)', border: '1px solid rgba(0,255,100,0.15)',
+                    borderRadius: '8px', padding: '12px', color: '#00ff64',
+                    cursor: 'pointer', opacity: downloadingIds[msg.id] ? 0.6 : 1,
+                    height: '40px', width: '40px', flexShrink: 0,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    outline: 'none',
+                  }}
+                >
+                  {downloadingIds[msg.id] ? (
+                    <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    <Download style={{ width: 16, height: 16 }} />
+                  )}
+                </button>
+              </div>
 
               {msg.transcription ? (
                 <div style={{
